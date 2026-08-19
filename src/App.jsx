@@ -703,7 +703,7 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
                 style={{
                   width: 160,
                   flexShrink: 0,
-                  padding: "8px 8px 8px 0",
+                  padding: "8px 8px 8px 12px",
                   display: "flex",
                   alignItems: "center",
                 }}
@@ -1253,14 +1253,14 @@ export default function DispatchApp() {
         minHeight: "100vh",
         minWidth: "fit-content",
         width: "100%",
-        padding: 20,
+        padding: "20px 20px 20px 0px",
         boxSizing: "border-box",
         color: "#1A2332",
       }}
     >
       <ConfirmDialog dialog={dialog} onConfirm={runConfirm} onCancel={closeDialog} />
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, paddingLeft: 16 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ marginRight: 8 }}>配車管理</span>
@@ -1311,7 +1311,7 @@ export default function DispatchApp() {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 16, paddingLeft: 16 }}>
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -1334,7 +1334,7 @@ export default function DispatchApp() {
 
       {tab === "board" && (
         <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>
-          <div>
+          <div style={{ paddingLeft: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <div style={{ fontSize: 13, fontWeight: 700 }}>案件一覧</div>
               <button
@@ -1370,21 +1370,21 @@ export default function DispatchApp() {
             </div>
           </div>
 
-          <div style={{ background: "#FFFFFF", border: "1px solid #D8D3C7", borderRadius: 8, padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>車両別スケジュール（回次順）</div>
+          <div style={{ background: "#FFFFFF", border: "1px solid #D8D3C7", borderRadius: 8, padding: "16px 16px 16px 0" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, paddingLeft: 16 }}>車両別スケジュール（回次順）</div>
             <DispatchBoard vehicles={vehicles} assignments={assignments} jobs={jobs} drivers={drivers} maxSeq={maxSeq} />
           </div>
         </div>
       )}
 
       {tab === "vehicles" && (
-        <div style={{ background: "#FFFFFF", border: "1px solid #D8D3C7", borderRadius: 8, padding: 16, maxWidth: 960 }}>
+        <div style={{ background: "#FFFFFF", border: "1px solid #D8D3C7", borderRadius: 8, padding: 16, marginLeft: 16, maxWidth: 960 }}>
           <VehicleMaster vehicles={vehicles} drivers={drivers} onAdd={addVehicle} onSave={saveVehicle} onRequestRemove={requestRemoveVehicle} />
         </div>
       )}
 
       {tab === "drivers" && (
-        <div style={{ background: "#FFFFFF", border: "1px solid #D8D3C7", borderRadius: 8, padding: 16, maxWidth: 560 }}>
+        <div style={{ background: "#FFFFFF", border: "1px solid #D8D3C7", borderRadius: 8, padding: 16, marginLeft: 16, maxWidth: 560 }}>
           <DriverMaster drivers={drivers} onAdd={addDriver} onSave={saveDriver} onRequestRemove={requestRemoveDriver} />
         </div>
       )}
