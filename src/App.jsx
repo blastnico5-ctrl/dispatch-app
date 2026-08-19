@@ -745,6 +745,11 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
                       const driver = drivers.find((d) => d.id === a.driverId);
                       const driverDisplayName = driver ? driver.name : a.driverName || "担当未定";
 
+                      // ルート（積込先 → 納入先）の文字列生成
+                      const locationText = job
+                        ? [job.pickup, job.dropoff].filter(Boolean).join(" → ")
+                        : "";
+
                       return (
                         <div
                           key={a.id}
@@ -755,6 +760,7 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
                             padding: "4px 6px",
                           }}
                         >
+                          {/* ドライバー名と宵積・宵下ろしタグ */}
                           <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 2 }}>
                             {a.isOvernight && <Tag tone="green">宵積</Tag>}
                             {job?.isOvernightDrop && <Tag tone="blue">宵下ろし</Tag>}
@@ -762,19 +768,42 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
                               {driverDisplayName}
                             </span>
                           </div>
-                          <div
-                            style={{
-                              fontSize: 10,
-                              color: "#5A3A00",
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                            }}
-                          >
-                            {job ? job.id.toUpperCase() : ""}
-                            {job && job.dropoff ? ` ${job.dropoff}` : ""}
-                          </div>
-                          {a.qty && <div style={{ fontSize: 10, color: "#5A3A00" }}>{a.qty}</div>}
+
+                          {/* 積込先 → 納入先 */}
+                          {locationText && (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#5A3A00",
+                                fontWeight: 600,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                              }}
+                              title={locationText}
+                            >
+                              {locationText}
+                            </div>
+                          )}
+
+                          {/* 品目 */}
+                          {job?.item && (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#4A2F00",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                              }}
+                              title={job.item}
+                            >
+                              品目: {job.item}
+                            </div>
+                          )}
+
+                          {/* 数量 */}
+                          {a.qty && <div style={{ fontSize: 10, color: "#5A3A00" }}>数量: {a.qty}</div>}
                         </div>
                       );
                     })}
