@@ -5,4 +5,6 @@ https://haisyakanri-app.vercel.app/
 
 ◆更新後はターミナルで以下のコマンドを実行する。
 
-git add . && git commit -m "update" && git push origin main
+git add .
+git commit -m "update"
+git push origin main

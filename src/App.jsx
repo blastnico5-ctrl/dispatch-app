@@ -575,7 +575,6 @@ function JobPanel({
                 </button>
               </div>
 
-              {/* 宵積みオプション設定 */}
               <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 11, background: "#F5F3EE", padding: "4px 8px", borderRadius: 4 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", fontWeight: 600, color: "#137333" }}>
                   <input
@@ -745,7 +744,6 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
                       const driver = drivers.find((d) => d.id === a.driverId);
                       const driverDisplayName = driver ? driver.name : a.driverName || "担当未定";
 
-                      // ルート（積込先 → 納入先）の文字列生成
                       const locationText = job
                         ? [job.pickup, job.dropoff].filter(Boolean).join(" → ")
                         : "";
@@ -760,7 +758,6 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
                             padding: "4px 6px",
                           }}
                         >
-                          {/* ドライバー名と宵積・宵下ろしタグ */}
                           <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 2 }}>
                             {a.isOvernight && <Tag tone="green">宵積</Tag>}
                             {job?.isOvernightDrop && <Tag tone="blue">宵下ろし</Tag>}
@@ -769,7 +766,6 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
                             </span>
                           </div>
 
-                          {/* 積込先 → 納入先 */}
                           {locationText && (
                             <div
                               style={{
@@ -786,7 +782,6 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
                             </div>
                           )}
 
-                          {/* 品目 */}
                           {job?.item && (
                             <div
                               style={{
@@ -802,7 +797,6 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
                             </div>
                           )}
 
-                          {/* 数量 */}
                           {a.qty && <div style={{ fontSize: 10, color: "#5A3A00" }}>数量: {a.qty}</div>}
                         </div>
                       );
@@ -1043,7 +1037,6 @@ export default function DispatchApp() {
     );
   };
 
-  // 宵下ろし案件を自動生成して指定日に保存する関数
   const syncOvernightDrop = (parentJob, assignment) => {
     if (!assignment.isOvernight || !assignment.dropDate) return;
 
@@ -1051,7 +1044,6 @@ export default function DispatchApp() {
     const targetDataRaw = localStorage.getItem(targetDateKey);
     const targetData = targetDataRaw ? JSON.parse(targetDataRaw) : { jobs: [], assignments: [] };
 
-    // 既に同一の宵下ろし案件が存在するかチェック
     const existingJob = targetData.jobs.find((j) => j.fromOvernightId === assignment.id);
     const dropJobId = existingJob ? existingJob.id : uid("j");
 
@@ -1071,7 +1063,7 @@ export default function DispatchApp() {
       vehiclePlate: assignment.vehiclePlate,
       driverId: assignment.driverId,
       driverName: assignment.driverName,
-      sequence: 1, // 朝一番の下ろしとして1回目を初期セット
+      sequence: 1,
       qty: assignment.qty,
       isOvernight: false,
       dropDate: "",
@@ -1166,7 +1158,6 @@ export default function DispatchApp() {
         ];
         saveDailyData(jobs, nextAssignments);
 
-        // 宵積みチェックが入っている配車枠を連動同期
         draftList.forEach((a) => {
           if (a.isOvernight) {
             syncOvernightDrop(parentJob, a);
@@ -1188,7 +1179,7 @@ export default function DispatchApp() {
       confirmLabel: "削除する",
       onConfirm: () => {
         const nextAssignments = assignments.filter((a) => a.id !== id);
-        saveDailyData(jobs, nextAssignments);
+        saveDailyData(nextJobs, nextAssignments);
         afterConfirm();
       },
     });
@@ -1259,7 +1250,8 @@ export default function DispatchApp() {
       style={{
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic', sans-serif",
         background: "#F5F3EE",
-        minHeight: "100vh",
+        minHeight: "100%",
+        width: "100%",
         padding: 20,
         boxSizing: "border-box",
         color: "#1A2332",
