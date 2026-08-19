@@ -40,10 +40,10 @@ const initialJobs = [
 ];
 
 const initialAssignments = [
-  { id: "a1", jobId: "j1", vehicleId: "v1", vehiclePlate: "26", driverId: "d1", driverName: "君島秀幸", sequence: 1, qty: "5パレット" },
-  { id: "a2", jobId: "j1", vehicleId: "v2", vehiclePlate: "48", driverId: "d2", driverName: "渡部光明", sequence: 1, qty: "3パレット" },
-  { id: "a3", jobId: "j3", vehicleId: "v1", vehiclePlate: "26", driverId: "d1", driverName: "君島秀幸", sequence: 2, qty: "" },
-  { id: "a4", jobId: "j2", vehicleId: "v5", vehiclePlate: "2151", driverId: "d5", driverName: "外薗桐郎", sequence: 1, qty: "" },
+  { id: "a1", jobId: "j1", vehicleId: "v1", vehiclePlate: "26", driverId: "d1", driverName: "君島秀幸", sequence: 1, qty: "5パレット", isOvernight: false, dropDate: "" },
+  { id: "a2", jobId: "j1", vehicleId: "v2", vehiclePlate: "48", driverId: "d2", driverName: "渡部光明", sequence: 1, qty: "3パレット", isOvernight: false, dropDate: "" },
+  { id: "a3", jobId: "j3", vehicleId: "v1", vehiclePlate: "26", driverId: "d1", driverName: "君島秀幸", sequence: 2, qty: "", isOvernight: false, dropDate: "" },
+  { id: "a4", jobId: "j2", vehicleId: "v5", vehiclePlate: "2151", driverId: "d5", driverName: "外薗桐郎", sequence: 1, qty: "", isOvernight: false, dropDate: "" },
 ];
 
 const statusMeta = {
@@ -60,13 +60,6 @@ const isEditableDate = (dateStr) => {
 };
 
 const getRawDigits = (numStr) => (numStr ? String(numStr).replace(/\D/g, "") : "");
-
-const formatPlate = (v) => {
-  if (!v) return "未定";
-  const digits = getRawDigits(v.num);
-  const parts = [v.area, v.classNum, v.kana, digits].filter(Boolean);
-  return parts.length > 0 ? parts.join(" ") : "未設定";
-};
 
 const formatBoardPlate = (v) => (v ? getRawDigits(v.num) || "未設定" : "未定");
 
@@ -229,17 +222,21 @@ function Tag({ children, tone = "neutral" }) {
   const tones = {
     neutral: { bg: "#F0F0EC", color: "#6B6B63" },
     amber: { bg: "#FDEEDB", color: "#B5650A" },
+    green: { bg: "#E6F4EA", color: "#137333" },
+    blue: { bg: "#E8F0FE", color: "#1A73E8" },
   };
-  const t = tones[tone];
+  const t = tones[tone] || tones.neutral;
   return (
     <span
       style={{
-        fontSize: 11,
-        padding: "2px 8px",
-        borderRadius: 10,
+        fontSize: 10,
+        padding: "2px 6px",
+        borderRadius: 4,
         background: t.bg,
         color: t.color,
-        fontWeight: 600,
+        fontWeight: 700,
+        display: "inline-block",
+        marginRight: 4,
       }}
     >
       {children}
@@ -269,6 +266,8 @@ const ASSIGN_FIELDS = [
   { key: "driverId", label: "ドライバー" },
   { key: "sequence", label: "回次" },
   { key: "qty", label: "数量" },
+  { key: "isOvernight", label: "宵積み" },
+  { key: "dropDate", label: "卸日" },
 ];
 
 function JobPanel({
@@ -276,6 +275,7 @@ function JobPanel({
   assignments,
   vehicles,
   drivers,
+  currentDate,
   onSaveJob,
   onSaveAssignments,
   onRequestRemoveJob,
@@ -357,18 +357,31 @@ function JobPanel({
             before = getDriverLabel(before);
             after = getDriverLabel(after);
           }
+          if (f.key === "isOvernight") {
+            before = before ? "あり" : "なし";
+            after = after ? "あり" : "なし";
+          }
           changes.push({ label: `${f.label}（配車枠）`, before, after });
         }
       });
     });
-    onSaveAssignments(job.id, formattedAssignments, changes);
+    onSaveAssignments(job, formattedAssignments, changes);
   };
 
   const addDraftAssignment = () => {
     if (!isEditable) return;
     setDraftAssignments((prev) => [
       ...prev,
-      { id: uid("a"), jobId: job.id, vehicleId: null, driverId: null, sequence: 1, qty: "" },
+      {
+        id: uid("a"),
+        jobId: job.id,
+        vehicleId: null,
+        driverId: null,
+        sequence: 1,
+        qty: "",
+        isOvernight: false,
+        dropDate: shiftDate(currentDate, 1),
+      },
     ]);
   };
 
@@ -377,11 +390,10 @@ function JobPanel({
     setDraftAssignments((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
   };
 
-  // 車両変更時に基本ドライバーを自動セットする関数
   const handleVehicleChange = (assignmentId, selectedVehicleId) => {
     if (!isEditable) return;
     const targetVehicle = vehicles.find((v) => v.id === selectedVehicleId);
-    
+
     setDraftAssignments((prev) =>
       prev.map((a) => {
         if (a.id !== assignmentId) return a;
@@ -424,6 +436,7 @@ function JobPanel({
             <span style={{ fontFamily: "monospace", fontSize: 12, color: "#4A5568", fontWeight: 600 }}>
               {job.id.toUpperCase()}
             </span>
+            {job.isOvernightDrop && <Tag tone="blue">宵下ろし</Tag>}
             <Tag tone={jobAssignments.length > 0 ? "amber" : "neutral"}>
               配車 {jobAssignments.length} 件
             </Tag>
@@ -467,7 +480,7 @@ function JobPanel({
           </div>
 
           <div style={{ fontSize: 12, fontWeight: 700, color: "#1A2332", marginBottom: 6 }}>
-            配車（車両・ドライバー・数量）
+            配車（車両・ドライバー・回次・宵積設定）
           </div>
 
           {draftAssignments.length === 0 && (
@@ -480,87 +493,118 @@ function JobPanel({
             <div
               key={a.id}
               style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr 55px 1fr 28px",
-                gap: 6,
-                alignItems: "center",
-                marginBottom: 6,
+                background: "#FFFFFF",
+                border: "1px solid #ECE8DC",
+                borderRadius: 6,
+                padding: 8,
+                marginBottom: 8,
               }}
             >
-              <select
-                disabled={!isEditable}
-                value={a.vehicleId || ""}
-                onChange={(e) => handleVehicleChange(a.id, e.target.value)}
-                style={{ ...inputStyle, fontFamily: "monospace", ...(isEditable ? {} : { opacity: 0.6, cursor: "not-allowed" }) }}
-              >
-                <option value="">車両未定</option>
-                {vehicles.map((v) => (
-                  <option key={v.id} value={v.id} disabled={v.status === "maintenance"}>
-                    {formatBoardPlate(v)} ({v.type})
-                  </option>
-                ))}
-                {a.vehicleId && !vehicles.some((v) => v.id === a.vehicleId) && (
-                  <option value={a.vehicleId} disabled>
-                    {a.vehiclePlate || "削除された車両"}
-                  </option>
-                )}
-              </select>
-
-              <select
-                disabled={!isEditable}
-                value={a.driverId || ""}
-                onChange={(e) => updateDraftAssignment(a.id, { driverId: e.target.value || null })}
-                style={{ ...inputStyle, ...(isEditable ? {} : { opacity: 0.6, cursor: "not-allowed" }) }}
-              >
-                <option value="">担当未定</option>
-                {drivers.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-                {a.driverId && !drivers.some((d) => d.id === a.driverId) && (
-                  <option value={a.driverId} disabled>
-                    {a.driverName || "削除されたドライバー"}
-                  </option>
-                )}
-              </select>
-
-              <input
-                disabled={!isEditable}
-                type="number"
-                min={1}
-                value={a.sequence}
-                onChange={(e) =>
-                  updateDraftAssignment(a.id, { sequence: Math.max(1, Number(e.target.value) || 1) })
-                }
-                style={{ ...inputStyle, ...(isEditable ? {} : { opacity: 0.6, cursor: "not-allowed" }) }}
-              />
-              <input
-                disabled={!isEditable}
-                value={a.qty || ""}
-                onChange={(e) => updateDraftAssignment(a.id, { qty: e.target.value })}
-                placeholder="数量"
-                style={{ ...inputStyle, ...(isEditable ? {} : { opacity: 0.6, cursor: "not-allowed" }) }}
-              />
-              <button
-                disabled={!isEditable}
-                onClick={() => {
-                  if (jobAssignments.some((o) => o.id === a.id)) {
-                    onRequestRemoveAssignment(a.id, () => removeDraftAssignment(a.id));
-                  } else {
-                    removeDraftAssignment(a.id);
-                  }
-                }}
+              <div
                 style={{
-                  border: "none",
-                  background: "none",
-                  color: isEditable ? "#C53030" : "#B5B0A2",
-                  cursor: isEditable ? "pointer" : "not-allowed",
-                  fontSize: 16,
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 55px 1fr 28px",
+                  gap: 6,
+                  alignItems: "center",
+                  marginBottom: 6,
                 }}
               >
-                ×
-              </button>
+                <select
+                  disabled={!isEditable}
+                  value={a.vehicleId || ""}
+                  onChange={(e) => handleVehicleChange(a.id, e.target.value)}
+                  style={{ ...inputStyle, fontFamily: "monospace", ...(isEditable ? {} : { opacity: 0.6, cursor: "not-allowed" }) }}
+                >
+                  <option value="">車両未定</option>
+                  {vehicles.map((v) => (
+                    <option key={v.id} value={v.id} disabled={v.status === "maintenance"}>
+                      {formatBoardPlate(v)} ({v.type})
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  disabled={!isEditable}
+                  value={a.driverId || ""}
+                  onChange={(e) => updateDraftAssignment(a.id, { driverId: e.target.value || null })}
+                  style={{ ...inputStyle, ...(isEditable ? {} : { opacity: 0.6, cursor: "not-allowed" }) }}
+                >
+                  <option value="">担当未定</option>
+                  {drivers.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  disabled={!isEditable}
+                  type="number"
+                  min={1}
+                  value={a.sequence}
+                  onChange={(e) =>
+                    updateDraftAssignment(a.id, { sequence: Math.max(1, Number(e.target.value) || 1) })
+                  }
+                  style={{ ...inputStyle, ...(isEditable ? {} : { opacity: 0.6, cursor: "not-allowed" }) }}
+                />
+                <input
+                  disabled={!isEditable}
+                  value={a.qty || ""}
+                  onChange={(e) => updateDraftAssignment(a.id, { qty: e.target.value })}
+                  placeholder="数量"
+                  style={{ ...inputStyle, ...(isEditable ? {} : { opacity: 0.6, cursor: "not-allowed" }) }}
+                />
+                <button
+                  disabled={!isEditable}
+                  onClick={() => {
+                    if (jobAssignments.some((o) => o.id === a.id)) {
+                      onRequestRemoveAssignment(a.id, () => removeDraftAssignment(a.id));
+                    } else {
+                      removeDraftAssignment(a.id);
+                    }
+                  }}
+                  style={{
+                    border: "none",
+                    background: "none",
+                    color: isEditable ? "#C53030" : "#B5B0A2",
+                    cursor: isEditable ? "pointer" : "not-allowed",
+                    fontSize: 16,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* 宵積みオプション設定 */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 11, background: "#F5F3EE", padding: "4px 8px", borderRadius: 4 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", fontWeight: 600, color: "#137333" }}>
+                  <input
+                    type="checkbox"
+                    disabled={!isEditable}
+                    checked={!!a.isOvernight}
+                    onChange={(e) =>
+                      updateDraftAssignment(a.id, {
+                        isOvernight: e.target.checked,
+                        dropDate: a.dropDate || shiftDate(currentDate, 1),
+                      })
+                    }
+                  />
+                  宵積み（翌日以降に降ろす）
+                </label>
+
+                {a.isOvernight && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ color: "#8A857A" }}>卸指定日:</span>
+                    <input
+                      type="date"
+                      disabled={!isEditable}
+                      value={a.dropDate || shiftDate(currentDate, 1)}
+                      onChange={(e) => updateDraftAssignment(a.id, { dropDate: e.target.value })}
+                      style={{ ...inputStyle, padding: "2px 4px", width: "auto", fontSize: 11 }}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           ))}
 
@@ -711,8 +755,12 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
                             padding: "4px 6px",
                           }}
                         >
-                          <div style={{ fontSize: 11, fontWeight: 700, color: "#3D2400" }}>
-                            {driverDisplayName}
+                          <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 2 }}>
+                            {a.isOvernight && <Tag tone="green">宵積</Tag>}
+                            {job?.isOvernightDrop && <Tag tone="blue">宵下ろし</Tag>}
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "#3D2400" }}>
+                              {driverDisplayName}
+                            </span>
                           </div>
                           <div
                             style={{
@@ -784,87 +832,38 @@ function VehicleRow({ vehicle, drivers, onSave, onRequestRemove }) {
   return (
     <tr style={{ borderTop: "1px solid #ECE8DC" }}>
       <td style={{ padding: "4px" }}>
-        <input
-          value={draft.area || ""}
-          onChange={(e) => setDraft({ ...draft, area: e.target.value })}
-          style={inputStyle}
-        />
+        <input value={draft.area || ""} onChange={(e) => setDraft({ ...draft, area: e.target.value })} style={inputStyle} />
       </td>
       <td style={{ padding: "4px" }}>
-        <input
-          value={draft.classNum || ""}
-          onChange={(e) => setDraft({ ...draft, classNum: e.target.value })}
-          style={{ ...inputStyle, fontFamily: "monospace" }}
-        />
+        <input value={draft.classNum || ""} onChange={(e) => setDraft({ ...draft, classNum: e.target.value })} style={{ ...inputStyle, fontFamily: "monospace" }} />
       </td>
       <td style={{ padding: "4px" }}>
-        <input
-          value={draft.kana || ""}
-          onChange={(e) => setDraft({ ...draft, kana: e.target.value })}
-          style={inputStyle}
-        />
+        <input value={draft.kana || ""} onChange={(e) => setDraft({ ...draft, kana: e.target.value })} style={inputStyle} />
       </td>
       <td style={{ padding: "4px" }}>
-        <input
-          value={draft.num || ""}
-          onChange={(e) => setDraft({ ...draft, num: e.target.value })}
-          maxLength={4}
-          style={{ ...inputStyle, fontFamily: "monospace" }}
-        />
+        <input value={draft.num || ""} onChange={(e) => setDraft({ ...draft, num: e.target.value })} maxLength={4} style={{ ...inputStyle, fontFamily: "monospace" }} />
       </td>
       <td style={{ padding: "4px" }}>
-        <input
-          value={draft.type || ""}
-          onChange={(e) => setDraft({ ...draft, type: e.target.value })}
-          style={inputStyle}
-        />
+        <input value={draft.type || ""} onChange={(e) => setDraft({ ...draft, type: e.target.value })} style={inputStyle} />
       </td>
       <td style={{ padding: "4px" }}>
-        <select
-          value={draft.defaultDriverId || ""}
-          onChange={(e) => setDraft({ ...draft, defaultDriverId: e.target.value || null })}
-          style={inputStyle}
-        >
+        <select value={draft.defaultDriverId || ""} onChange={(e) => setDraft({ ...draft, defaultDriverId: e.target.value || null })} style={inputStyle}>
           <option value="">未設定</option>
           {drivers.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
+            <option key={d.id} value={d.id}>{d.name}</option>
           ))}
         </select>
       </td>
       <td style={{ padding: "4px" }}>
-        <select
-          value={draft.status || "available"}
-          onChange={(e) => setDraft({ ...draft, status: e.target.value })}
-          style={inputStyle}
-        >
+        <select value={draft.status || "available"} onChange={(e) => setDraft({ ...draft, status: e.target.value })} style={inputStyle}>
           {Object.entries(statusMeta).map(([k, m]) => (
-            <option key={k} value={k}>
-              {m.label}
-            </option>
+            <option key={k} value={k}>{m.label}</option>
           ))}
         </select>
       </td>
       <td style={{ padding: "4px 6px", textAlign: "right" }}>
-        <button
-          onClick={handleSave}
-          disabled={!dirty}
-          style={{
-            ...btnPrimary,
-            padding: "4px 10px",
-            opacity: dirty ? 1 : 0.4,
-            marginRight: 6,
-          }}
-        >
-          保存
-        </button>
-        <button
-          onClick={() => onRequestRemove(vehicle.id)}
-          style={{ border: "none", background: "none", color: "#C53030", cursor: "pointer" }}
-        >
-          削除
-        </button>
+        <button onClick={handleSave} disabled={!dirty} style={{ ...btnPrimary, padding: "4px 10px", opacity: dirty ? 1 : 0.4, marginRight: 6 }}>保存</button>
+        <button onClick={() => onRequestRemove(vehicle.id)} style={{ border: "none", background: "none", color: "#C53030", cursor: "pointer" }}>削除</button>
       </td>
     </tr>
   );
@@ -892,9 +891,7 @@ function VehicleMaster({ vehicles, drivers, onAdd, onSave, onRequestRemove }) {
           ))}
         </tbody>
       </table>
-      <button onClick={onAdd} style={{ ...btnPrimary, marginTop: 10 }}>
-        ＋ 車両を追加
-      </button>
+      <button onClick={onAdd} style={{ ...btnPrimary, marginTop: 10 }}>＋ 車両を追加</button>
     </div>
   );
 }
@@ -919,39 +916,14 @@ function DriverRow({ driver, onSave, onRequestRemove }) {
   return (
     <tr style={{ borderTop: "1px solid #ECE8DC" }}>
       <td style={{ padding: "4px 6px" }}>
-        <input
-          value={draft.name || ""}
-          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          style={inputStyle}
-        />
+        <input value={draft.name || ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} style={inputStyle} />
       </td>
       <td style={{ padding: "4px 6px" }}>
-        <input
-          value={draft.phone || ""}
-          onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
-          placeholder="未入力"
-          style={inputStyle}
-        />
+        <input value={draft.phone || ""} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} placeholder="未入力" style={inputStyle} />
       </td>
       <td style={{ padding: "4px 6px", textAlign: "right" }}>
-        <button
-          onClick={handleSave}
-          disabled={!dirty}
-          style={{
-            ...btnPrimary,
-            padding: "4px 10px",
-            opacity: dirty ? 1 : 0.4,
-            marginRight: 6,
-          }}
-        >
-          保存
-        </button>
-        <button
-          onClick={() => onRequestRemove(driver.id)}
-          style={{ border: "none", background: "none", color: "#C53030", cursor: "pointer" }}
-        >
-          削除
-        </button>
+        <button onClick={handleSave} disabled={!dirty} style={{ ...btnPrimary, padding: "4px 10px", opacity: dirty ? 1 : 0.4, marginRight: 6 }}>保存</button>
+        <button onClick={() => onRequestRemove(driver.id)} style={{ border: "none", background: "none", color: "#C53030", cursor: "pointer" }}>削除</button>
       </td>
     </tr>
   );
@@ -974,9 +946,7 @@ function DriverMaster({ drivers, onAdd, onSave, onRequestRemove }) {
           ))}
         </tbody>
       </table>
-      <button onClick={onAdd} style={{ ...btnPrimary, marginTop: 10 }}>
-        ＋ ドライバーを追加
-      </button>
+      <button onClick={onAdd} style={{ ...btnPrimary, marginTop: 10 }}>＋ ドライバーを追加</button>
     </div>
   );
 }
@@ -989,7 +959,6 @@ const TABS = [
 
 export default function DispatchApp() {
   const [selectedDate, setSelectedDate] = useState(getTodayString);
-
   const isEditable = useMemo(() => isEditableDate(selectedDate), [selectedDate]);
 
   const [vehicles, setVehicles] = useState(() => {
@@ -1004,7 +973,6 @@ export default function DispatchApp() {
 
   const [jobs, setJobs] = useState([]);
   const [assignments, setAssignments] = useState([]);
-
   const [expandedJobId, setExpandedJobId] = useState(null);
   const [tab, setTab] = useState("board");
   const [dialog, setDialog] = useState(null);
@@ -1044,6 +1012,51 @@ export default function DispatchApp() {
       `dispatch_data_${selectedDate}`,
       JSON.stringify({ jobs: newJobs, assignments: newAssignments })
     );
+  };
+
+  // 宵下ろし案件を自動生成して指定日に保存する関数
+  const syncOvernightDrop = (parentJob, assignment) => {
+    if (!assignment.isOvernight || !assignment.dropDate) return;
+
+    const targetDateKey = `dispatch_data_${assignment.dropDate}`;
+    const targetDataRaw = localStorage.getItem(targetDateKey);
+    const targetData = targetDataRaw ? JSON.parse(targetDataRaw) : { jobs: [], assignments: [] };
+
+    // 既に同一の宵下ろし案件が存在するかチェック
+    const existingJob = targetData.jobs.find((j) => j.fromOvernightId === assignment.id);
+    const dropJobId = existingJob ? existingJob.id : uid("j");
+
+    const newDropJob = {
+      id: dropJobId,
+      pickup: `【宵下ろし】${parentJob.pickup || ""}`,
+      dropoff: parentJob.dropoff,
+      item: parentJob.item,
+      isOvernightDrop: true,
+      fromOvernightId: assignment.id,
+    };
+
+    const newDropAssignment = {
+      id: uid("a"),
+      jobId: dropJobId,
+      vehicleId: assignment.vehicleId,
+      vehiclePlate: assignment.vehiclePlate,
+      driverId: assignment.driverId,
+      driverName: assignment.driverName,
+      sequence: 1, // 朝一番の下ろしとして1回目を初期セット
+      qty: assignment.qty,
+      isOvernight: false,
+      dropDate: "",
+    };
+
+    const nextJobs = existingJob
+      ? targetData.jobs.map((j) => (j.id === dropJobId ? newDropJob : j))
+      : [...targetData.jobs, newDropJob];
+
+    const nextAssignments = targetData.assignments.some((a) => a.jobId === dropJobId)
+      ? targetData.assignments.map((a) => (a.jobId === dropJobId ? newDropAssignment : a))
+      : [...targetData.assignments, newDropAssignment];
+
+    localStorage.setItem(targetDateKey, JSON.stringify({ jobs: nextJobs, assignments: nextAssignments }));
   };
 
   useEffect(() => {
@@ -1108,7 +1121,7 @@ export default function DispatchApp() {
     });
   };
 
-  const saveAssignments = (jobId, draftList, changes) => {
+  const saveAssignments = (parentJob, draftList, changes) => {
     if (!isEditable) {
       saveDailyData([], []);
       return;
@@ -1119,10 +1132,17 @@ export default function DispatchApp() {
       changes,
       onConfirm: () => {
         const nextAssignments = [
-          ...assignments.filter((a) => a.jobId !== jobId),
+          ...assignments.filter((a) => a.jobId !== parentJob.id),
           ...draftList,
         ];
         saveDailyData(jobs, nextAssignments);
+
+        // 宵積みチェックが入っている配車枠を連動同期
+        draftList.forEach((a) => {
+          if (a.isOvernight) {
+            syncOvernightDrop(parentJob, a);
+          }
+        });
       },
     });
   };
@@ -1222,7 +1242,7 @@ export default function DispatchApp() {
         <div>
           <div style={{ fontSize: 20, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ marginRight: 8 }}>配車管理</span>
-            
+
             <button onClick={handlePrevDay} style={btnGhost}>
               ◀ 前日
             </button>
@@ -1315,6 +1335,7 @@ export default function DispatchApp() {
                   assignments={assignments}
                   vehicles={vehicles}
                   drivers={drivers}
+                  currentDate={selectedDate}
                   onSaveJob={saveJob}
                   onSaveAssignments={saveAssignments}
                   onRequestRemoveJob={requestRemoveJob}
