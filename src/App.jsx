@@ -1179,7 +1179,7 @@ export default function DispatchApp() {
       confirmLabel: "削除する",
       onConfirm: () => {
         const nextAssignments = assignments.filter((a) => a.id !== id);
-        saveDailyData(nextJobs, nextAssignments);
+        saveDailyData(jobs, nextAssignments); // ★ nextJobs から jobs に修正
         afterConfirm();
       },
     });
