@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { supabase } from "./supabaseClient";
 
 const uid = (p) => `${p}${Math.random().toString(36).slice(2, 8)}`;
 
@@ -33,19 +34,6 @@ const initialDrivers = [
   { id: "d12", name: "佐野RC", phone: "" },
 ];
 
-const initialJobs = [
-  { id: "j1", pickup: "千葉県市川市 A倉庫", dropoff: "東京都江東区 B物流センター", item: "紙製品パレット" },
-  { id: "j2", pickup: "", dropoff: "神奈川県川崎市 C工場", item: "" },
-  { id: "j3", pickup: "埼玉県越谷市 D流通センター", dropoff: "東京都足立区 E店舗", item: "飲料ケース" },
-];
-
-const initialAssignments = [
-  { id: "a1", jobId: "j1", vehicleId: "v1", vehiclePlate: "26", driverId: "d1", driverName: "君島秀幸", sequence: 1, qty: "5パレット", isOvernight: false, dropDate: "" },
-  { id: "a2", jobId: "j1", vehicleId: "v2", vehiclePlate: "48", driverId: "d2", driverName: "渡部光明", sequence: 1, qty: "3パレット", isOvernight: false, dropDate: "" },
-  { id: "a3", jobId: "j3", vehicleId: "v1", vehiclePlate: "26", driverId: "d1", driverName: "君島秀幸", sequence: 2, qty: "", isOvernight: false, dropDate: "" },
-  { id: "a4", jobId: "j2", vehicleId: "v5", vehiclePlate: "2151", driverId: "d5", driverName: "外薗桐郎", sequence: 1, qty: "", isOvernight: false, dropDate: "" },
-];
-
 const statusMeta = {
   available: { label: "待機中", color: "#4A5568" },
   maintenance: { label: "整備中", color: "#C53030" },
@@ -60,7 +48,6 @@ const isEditableDate = (dateStr) => {
 };
 
 const getRawDigits = (numStr) => (numStr ? String(numStr).replace(/\D/g, "") : "");
-
 const formatBoardPlate = (v) => (v ? getRawDigits(v.num) || "未設定" : "未定");
 
 const formatDate = (dateObj) => {
@@ -984,43 +971,64 @@ export default function DispatchApp() {
   const [selectedDate, setSelectedDate] = useState(getTodayString);
   const isEditable = useMemo(() => isEditableDate(selectedDate), [selectedDate]);
 
-  const [vehicles, setVehicles] = useState(() => {
-    const saved = localStorage.getItem("dispatch_vehicles");
-    return saved ? JSON.parse(saved) : initialVehicles;
-  });
-
-  const [drivers, setDrivers] = useState(() => {
-    const saved = localStorage.getItem("dispatch_drivers");
-    return saved ? JSON.parse(saved) : initialDrivers;
-  });
-
+  const [vehicles, setVehicles] = useState([]);
+  const [drivers, setDrivers] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [expandedJobId, setExpandedJobId] = useState(null);
   const [tab, setTab] = useState("board");
   const [dialog, setDialog] = useState(null);
 
+  // 初期化＆Supabaseからの全データ取得・リアルタイム同期
   useEffect(() => {
-    const savedData = localStorage.getItem(`dispatch_data_${selectedDate}`);
-    if (savedData) {
-      const parsed = JSON.parse(savedData);
-      setJobs(parsed.jobs || []);
-      setAssignments(parsed.assignments || []);
-      setExpandedJobId(parsed.jobs?.[0]?.id || null);
-    } else {
-      if (selectedDate === getTodayString()) {
-        setJobs(initialJobs);
-        setAssignments(initialAssignments);
-        setExpandedJobId(initialJobs[0]?.id || null);
-      } else {
-        setJobs([]);
-        setAssignments([]);
-        setExpandedJobId(null);
-      }
-    }
+    fetchMasterData();
+    fetchDailyData(selectedDate);
+
+    // Supabase Realtime サブスクリプションの設定
+    const channel = supabase
+      .channel("schema-db-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "vehicles" }, () => fetchMasterData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "drivers" }, () => fetchMasterData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, () => fetchDailyData(selectedDate))
+      .on("postgres_changes", { event: "*", schema: "public", table: "assignments" }, () => fetchDailyData(selectedDate))
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [selectedDate]);
 
-  const saveDailyData = (newJobs, newAssignments) => {
+  const fetchMasterData = async () => {
+    const { data: vData } = await supabase.from("vehicles").select("*");
+    const { data: dData } = await supabase.from("drivers").select("*");
+
+    if (vData && vData.length > 0) {
+      setVehicles(vData);
+    } else {
+      // 初期データ登録
+      await supabase.from("vehicles").upsert(initialVehicles);
+      setVehicles(initialVehicles);
+    }
+
+    if (dData && dData.length > 0) {
+      setDrivers(dData);
+    } else {
+      // 初期データ登録
+      await supabase.from("drivers").upsert(initialDrivers);
+      setDrivers(initialDrivers);
+    }
+  };
+
+  const fetchDailyData = async (dateStr) => {
+    const { data: jData } = await supabase.from("jobs").select("*").eq("date", dateStr);
+    const { data: aData } = await supabase.from("assignments").select("*").eq("date", dateStr);
+
+    setJobs(jData || []);
+    setAssignments(aData || []);
+    setExpandedJobId(jData?.[0]?.id || null);
+  };
+
+  const saveDailyData = async (newJobs, newAssignments) => {
     if (!isEditable) {
       setDialog({
         title: "変更できません",
@@ -1029,26 +1037,34 @@ export default function DispatchApp() {
       });
       return;
     }
+
     setJobs(newJobs);
     setAssignments(newAssignments);
-    localStorage.setItem(
-      `dispatch_data_${selectedDate}`,
-      JSON.stringify({ jobs: newJobs, assignments: newAssignments })
-    );
+
+    // Supabaseへの一括書き込み
+    if (newJobs.length > 0) {
+      const formattedJobs = newJobs.map((j) => ({ ...j, date: selectedDate }));
+      await supabase.from("jobs").upsert(formattedJobs);
+    }
+    if (newAssignments.length > 0) {
+      const formattedAssigns = newAssignments.map((a) => ({ ...a, date: selectedDate }));
+      await supabase.from("assignments").upsert(formattedAssigns);
+    }
   };
 
-  const syncOvernightDrop = (parentJob, assignment) => {
+  const syncOvernightDrop = async (parentJob, assignment) => {
     if (!assignment.isOvernight || !assignment.dropDate) return;
 
-    const targetDateKey = `dispatch_data_${assignment.dropDate}`;
-    const targetDataRaw = localStorage.getItem(targetDateKey);
-    const targetData = targetDataRaw ? JSON.parse(targetDataRaw) : { jobs: [], assignments: [] };
+    const targetDate = assignment.dropDate;
+    const { data: targetJobs } = await supabase.from("jobs").select("*").eq("date", targetDate);
+    const { data: targetAssigns } = await supabase.from("assignments").select("*").eq("date", targetDate);
 
-    const existingJob = targetData.jobs.find((j) => j.fromOvernightId === assignment.id);
+    const existingJob = (targetJobs || []).find((j) => j.fromOvernightId === assignment.id);
     const dropJobId = existingJob ? existingJob.id : uid("j");
 
     const newDropJob = {
       id: dropJobId,
+      date: targetDate,
       pickup: `【宵下ろし】${parentJob.pickup || ""}`,
       dropoff: parentJob.dropoff,
       item: parentJob.item,
@@ -1058,6 +1074,7 @@ export default function DispatchApp() {
 
     const newDropAssignment = {
       id: uid("a"),
+      date: targetDate,
       jobId: dropJobId,
       vehicleId: assignment.vehicleId,
       vehiclePlate: assignment.vehiclePlate,
@@ -1069,24 +1086,9 @@ export default function DispatchApp() {
       dropDate: "",
     };
 
-    const nextJobs = existingJob
-      ? targetData.jobs.map((j) => (j.id === dropJobId ? newDropJob : j))
-      : [...targetData.jobs, newDropJob];
-
-    const nextAssignments = targetData.assignments.some((a) => a.jobId === dropJobId)
-      ? targetData.assignments.map((a) => (a.jobId === dropJobId ? newDropAssignment : a))
-      : [...targetData.assignments, newDropAssignment];
-
-    localStorage.setItem(targetDateKey, JSON.stringify({ jobs: nextJobs, assignments: nextAssignments }));
+    await supabase.from("jobs").upsert([newDropJob]);
+    await supabase.from("assignments").upsert([newDropAssignment]);
   };
-
-  useEffect(() => {
-    localStorage.setItem("dispatch_vehicles", JSON.stringify(vehicles));
-  }, [vehicles]);
-
-  useEffect(() => {
-    localStorage.setItem("dispatch_drivers", JSON.stringify(drivers));
-  }, [drivers]);
 
   const closeDialog = () => setDialog(null);
   const runConfirm = () => {
@@ -1098,65 +1100,58 @@ export default function DispatchApp() {
   const handleNextDay = () => setSelectedDate((prev) => shiftDate(prev, 1));
 
   const saveJob = (id, draft, changes) => {
-    if (!isEditable) {
-      saveDailyData([], []);
-      return;
-    }
+    if (!isEditable) return;
     if (changes.length === 0) return;
     setDialog({
       title: "案件情報を保存しますか？",
       changes,
-      onConfirm: () => {
+      onConfirm: async () => {
         const nextJobs = jobs.map((j) => (j.id === id ? { ...j, ...draft } : j));
-        saveDailyData(nextJobs, assignments);
+        await saveDailyData(nextJobs, assignments);
       },
     });
   };
 
-  const addJob = () => {
-    if (!isEditable) {
-      saveDailyData([], []);
-      return;
-    }
+  const addJob = async () => {
+    if (!isEditable) return;
     const id = uid("j");
     const nextJobs = [...jobs, { id, pickup: "", dropoff: "", item: "" }];
-    saveDailyData(nextJobs, assignments);
+    await saveDailyData(nextJobs, assignments);
     setExpandedJobId(id);
   };
 
   const requestRemoveJob = (id) => {
-    if (!isEditable) {
-      saveDailyData([], []);
-      return;
-    }
+    if (!isEditable) return;
     setDialog({
       title: "この案件を削除しますか？",
       message: "この案件に紐づく配車枠もすべて削除されます。",
       danger: true,
       confirmLabel: "削除する",
-      onConfirm: () => {
+      onConfirm: async () => {
         const nextJobs = jobs.filter((j) => j.id !== id);
         const nextAssignments = assignments.filter((a) => a.jobId !== id);
-        saveDailyData(nextJobs, nextAssignments);
+
+        setJobs(nextJobs);
+        setAssignments(nextAssignments);
+
+        await supabase.from("jobs").delete().eq("id", id);
+        await supabase.from("assignments").delete().eq("jobId", id);
       },
     });
   };
 
   const saveAssignments = (parentJob, draftList, changes) => {
-    if (!isEditable) {
-      saveDailyData([], []);
-      return;
-    }
+    if (!isEditable) return;
     if (changes.length === 0) return;
     setDialog({
       title: "配車内容を保存しますか？",
       changes,
-      onConfirm: () => {
+      onConfirm: async () => {
         const nextAssignments = [
           ...assignments.filter((a) => a.jobId !== parentJob.id),
           ...draftList,
         ];
-        saveDailyData(jobs, nextAssignments);
+        await saveDailyData(jobs, nextAssignments);
 
         draftList.forEach((a) => {
           if (a.isOvernight) {
@@ -1168,35 +1163,37 @@ export default function DispatchApp() {
   };
 
   const requestRemoveAssignment = (id, afterConfirm) => {
-    if (!isEditable) {
-      saveDailyData([], []);
-      return;
-    }
+    if (!isEditable) return;
     setDialog({
       title: "この配車枠を削除しますか？",
       message: "割り当てられている情報が削除されます。",
       danger: true,
       confirmLabel: "削除する",
-      onConfirm: () => {
+      onConfirm: async () => {
         const nextAssignments = assignments.filter((a) => a.id !== id);
-        saveDailyData(jobs, nextAssignments); // ★ nextJobs から jobs に修正
+        setAssignments(nextAssignments);
+        await supabase.from("assignments").delete().eq("id", id);
         afterConfirm();
       },
     });
   };
 
-  const addVehicle = () =>
-    setVehicles((prev) => [
-      ...prev,
-      { id: uid("v"), area: "", classNum: "", kana: "", num: "", type: "", status: "available", defaultDriverId: null },
-    ]);
+  const addVehicle = async () => {
+    const newV = { id: uid("v"), area: "", classNum: "", kana: "", num: "", type: "", status: "available", defaultDriverId: null };
+    setVehicles((prev) => [...prev, newV]);
+    await supabase.from("vehicles").upsert([newV]);
+  };
 
   const saveVehicle = (id, draft, changes) => {
     if (changes.length === 0) return;
     setDialog({
       title: "車両情報を保存しますか？",
       changes,
-      onConfirm: () => setVehicles((prev) => prev.map((v) => (v.id === id ? { ...v, ...draft } : v))),
+      onConfirm: async () => {
+        const updated = { ...draft, id };
+        setVehicles((prev) => prev.map((v) => (v.id === id ? updated : v)));
+        await supabase.from("vehicles").upsert([updated]);
+      },
     });
   };
 
@@ -1206,20 +1203,29 @@ export default function DispatchApp() {
       message: "マスターから削除されても、過去の配車記録には名前がそのまま残ります。",
       danger: true,
       confirmLabel: "削除する",
-      onConfirm: () => {
+      onConfirm: async () => {
         setVehicles((prev) => prev.filter((v) => v.id !== id));
+        await supabase.from("vehicles").delete().eq("id", id);
       },
     });
   };
 
-  const addDriver = () => setDrivers((prev) => [...prev, { id: uid("d"), name: "", phone: "" }]);
+  const addDriver = async () => {
+    const newD = { id: uid("d"), name: "", phone: "" };
+    setDrivers((prev) => [...prev, newD]);
+    await supabase.from("drivers").upsert([newD]);
+  };
 
   const saveDriver = (id, draft, changes) => {
     if (changes.length === 0) return;
     setDialog({
       title: "ドライバー情報を保存しますか？",
       changes,
-      onConfirm: () => setDrivers((prev) => prev.map((d) => (d.id === id ? { ...d, ...draft } : d))),
+      onConfirm: async () => {
+        const updated = { ...draft, id };
+        setDrivers((prev) => prev.map((d) => (d.id === id ? updated : d)));
+        await supabase.from("drivers").upsert([updated]);
+      },
     });
   };
 
@@ -1229,8 +1235,9 @@ export default function DispatchApp() {
       message: "マスターから削除されても、過去の配車記録には名前がそのまま残ります。",
       danger: true,
       confirmLabel: "削除する",
-      onConfirm: () => {
+      onConfirm: async () => {
         setDrivers((prev) => prev.filter((d) => d.id !== id));
+        await supabase.from("drivers").delete().eq("id", id);
       },
     });
   };
