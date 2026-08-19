@@ -1,1 +1,10 @@
-http://localhost:5173/
+◆接続先URL
+https://haisyakanri-app.vercel.app/
+
+
+
+◆更新後はターミナルで以下のコマンドを実行する。
+
+git add .
+git commit -m "更新内容のメモ"
+git push origin main

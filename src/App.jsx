@@ -3,19 +3,19 @@ import React, { useState, useMemo, useEffect } from "react";
 const uid = (p) => `${p}${Math.random().toString(36).slice(2, 8)}`;
 
 const initialVehicles = [
-  { id: "v1", area: "足立", classNum: "100", kana: "か", num: "26", type: "3軸トレーラ", status: "available" },
-  { id: "v2", area: "品川", classNum: "100", kana: "き", num: "48", type: "3軸トレーラ", status: "available" },
-  { id: "v3", area: "練馬", classNum: "400", kana: "く", num: "122", type: "3軸トレーラ", status: "available" },
-  { id: "v4", area: "多摩", classNum: "100", kana: "け", num: "898", type: "3軸トレーラ", status: "available" },
-  { id: "v5", area: "横浜", classNum: "100", kana: "こ", num: "2151", type: "ランゲン", status: "available" },
-  { id: "v6", area: "川崎", classNum: "100", kana: "さ", num: "2203", type: "ランゲン", status: "available" },
-  { id: "v7", area: "相模", classNum: "100", kana: "し", num: "2228", type: "ランゲン", status: "available" },
-  { id: "v8", area: "千葉", classNum: "100", kana: "す", num: "2239", type: "ランゲン", status: "available" },
-  { id: "v9", area: "習志野", classNum: "100", kana: "せ", num: "2410", type: "ランゲン", status: "available" },
-  { id: "v10", area: "柏", classNum: "100", kana: "そ", num: "5680", type: "ランゲン", status: "available" },
-  { id: "v11", area: "大宮", classNum: "100", kana: "た", num: "3015", type: "チップ車", status: "available" },
-  { id: "v12", area: "川越", classNum: "100", kana: "ち", num: "3214", type: "チップ車", status: "available" },
-  { id: "v13", area: "所沢", classNum: "100", kana: "つ", num: "3296", type: "チップ車", status: "available" },
+  { id: "v1", area: "足立", classNum: "100", kana: "か", num: "26", type: "3軸トレーラ", status: "available", defaultDriverId: "d1" },
+  { id: "v2", area: "品川", classNum: "100", kana: "き", num: "48", type: "3軸トレーラ", status: "available", defaultDriverId: "d2" },
+  { id: "v3", area: "練馬", classNum: "400", kana: "く", num: "122", type: "3軸トレーラ", status: "available", defaultDriverId: "d3" },
+  { id: "v4", area: "多摩", classNum: "100", kana: "け", num: "898", type: "3軸トレーラ", status: "available", defaultDriverId: "d4" },
+  { id: "v5", area: "横浜", classNum: "100", kana: "こ", num: "2151", type: "ランゲン", status: "available", defaultDriverId: "d5" },
+  { id: "v6", area: "川崎", classNum: "100", kana: "さ", num: "2203", type: "ランゲン", status: "available", defaultDriverId: "d6" },
+  { id: "v7", area: "相模", classNum: "100", kana: "し", num: "2228", type: "ランゲン", status: "available", defaultDriverId: "d7" },
+  { id: "v8", area: "千葉", classNum: "100", kana: "す", num: "2239", type: "ランゲン", status: "available", defaultDriverId: "d8" },
+  { id: "v9", area: "習志野", classNum: "100", kana: "せ", num: "2410", type: "ランゲン", status: "available", defaultDriverId: "d9" },
+  { id: "v10", area: "柏", classNum: "100", kana: "そ", num: "5680", type: "ランゲン", status: "available", defaultDriverId: "d10" },
+  { id: "v11", area: "大宮", classNum: "100", kana: "た", num: "3015", type: "チップ車", status: "available", defaultDriverId: "d11" },
+  { id: "v12", area: "川越", classNum: "100", kana: "ち", num: "3214", type: "チップ車", status: "available", defaultDriverId: "d12" },
+  { id: "v13", area: "所沢", classNum: "100", kana: "つ", num: "3296", type: "チップ車", status: "available", defaultDriverId: null },
 ];
 
 const initialDrivers = [
@@ -43,7 +43,7 @@ const initialAssignments = [
   { id: "a1", jobId: "j1", vehicleId: "v1", vehiclePlate: "26", driverId: "d1", driverName: "君島秀幸", sequence: 1, qty: "5パレット" },
   { id: "a2", jobId: "j1", vehicleId: "v2", vehiclePlate: "48", driverId: "d2", driverName: "渡部光明", sequence: 1, qty: "3パレット" },
   { id: "a3", jobId: "j3", vehicleId: "v1", vehiclePlate: "26", driverId: "d1", driverName: "君島秀幸", sequence: 2, qty: "" },
-  { id: "a4", jobId: "j2", vehicleId: "v5", vehiclePlate: "2151", driverId: null, driverName: "未定", sequence: 1, qty: "" },
+  { id: "a4", jobId: "j2", vehicleId: "v5", vehiclePlate: "2151", driverId: "d5", driverName: "外薗桐郎", sequence: 1, qty: "" },
 ];
 
 const statusMeta = {
@@ -323,7 +323,6 @@ function JobPanel({
 
   const handleSaveAssignments = () => {
     if (!isEditable) return;
-    const changes = [];
     const formattedAssignments = draftAssignments.map((d) => {
       const v = vehicles.find((v) => v.id === d.vehicleId);
       const dr = drivers.find((dr) => dr.id === d.driverId);
@@ -335,6 +334,7 @@ function JobPanel({
       };
     });
 
+    const changes = [];
     formattedAssignments.forEach((d) => {
       const orig = jobAssignments.find((o) => o.id === d.id);
       if (!orig) {
@@ -375,6 +375,23 @@ function JobPanel({
   const updateDraftAssignment = (id, patch) => {
     if (!isEditable) return;
     setDraftAssignments((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+  };
+
+  // 車両変更時に基本ドライバーを自動セットする関数
+  const handleVehicleChange = (assignmentId, selectedVehicleId) => {
+    if (!isEditable) return;
+    const targetVehicle = vehicles.find((v) => v.id === selectedVehicleId);
+    
+    setDraftAssignments((prev) =>
+      prev.map((a) => {
+        if (a.id !== assignmentId) return a;
+        return {
+          ...a,
+          vehicleId: selectedVehicleId || null,
+          driverId: targetVehicle?.defaultDriverId || a.driverId || null,
+        };
+      })
+    );
   };
 
   const removeDraftAssignment = (id) => {
@@ -473,7 +490,7 @@ function JobPanel({
               <select
                 disabled={!isEditable}
                 value={a.vehicleId || ""}
-                onChange={(e) => updateDraftAssignment(a.id, { vehicleId: e.target.value || null })}
+                onChange={(e) => handleVehicleChange(a.id, e.target.value)}
                 style={{ ...inputStyle, fontFamily: "monospace", ...(isEditable ? {} : { opacity: 0.6, cursor: "not-allowed" }) }}
               >
                 <option value="">車両未定</option>
@@ -604,6 +621,7 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
           num: a.vehiclePlate || "旧車両",
           type: "削除済車両",
           status: "available",
+          defaultDriverId: null,
         });
       }
     });
@@ -740,18 +758,26 @@ const VEHICLE_FIELDS = [
   { key: "kana", label: "ひらがな" },
   { key: "num", label: "車両番号" },
   { key: "type", label: "車種" },
+  { key: "defaultDriverId", label: "基本ドライバー" },
   { key: "status", label: "状態" },
 ];
 
-function VehicleRow({ vehicle, onSave, onRequestRemove }) {
+function VehicleRow({ vehicle, drivers, onSave, onRequestRemove }) {
   const { draft, setDraft, dirty } = useDraftRow(vehicle, VEHICLE_FIELDS);
 
   const handleSave = () => {
-    const changes = VEHICLE_FIELDS.filter((f) => draft[f.key] !== vehicle[f.key]).map((f) => ({
-      label: f.label,
-      before: f.key === "status" ? statusMeta[vehicle[f.key]]?.label : vehicle[f.key],
-      after: f.key === "status" ? statusMeta[draft[f.key]]?.label : draft[f.key],
-    }));
+    const changes = VEHICLE_FIELDS.filter((f) => draft[f.key] !== vehicle[f.key]).map((f) => {
+      let before = vehicle[f.key];
+      let after = draft[f.key];
+      if (f.key === "status") {
+        before = statusMeta[vehicle[f.key]]?.label;
+        after = statusMeta[draft[f.key]]?.label;
+      } else if (f.key === "defaultDriverId") {
+        before = drivers.find((d) => d.id === vehicle[f.key])?.name || "未設定";
+        after = drivers.find((d) => d.id === draft[f.key])?.name || "未設定";
+      }
+      return { label: f.label, before, after };
+    });
     onSave(vehicle.id, draft, changes);
   };
 
@@ -795,6 +821,20 @@ function VehicleRow({ vehicle, onSave, onRequestRemove }) {
       </td>
       <td style={{ padding: "4px" }}>
         <select
+          value={draft.defaultDriverId || ""}
+          onChange={(e) => setDraft({ ...draft, defaultDriverId: e.target.value || null })}
+          style={inputStyle}
+        >
+          <option value="">未設定</option>
+          {drivers.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td style={{ padding: "4px" }}>
+        <select
           value={draft.status || "available"}
           onChange={(e) => setDraft({ ...draft, status: e.target.value })}
           style={inputStyle}
@@ -830,24 +870,25 @@ function VehicleRow({ vehicle, onSave, onRequestRemove }) {
   );
 }
 
-function VehicleMaster({ vehicles, onAdd, onSave, onRequestRemove }) {
+function VehicleMaster({ vehicles, drivers, onAdd, onSave, onRequestRemove }) {
   return (
     <div>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <thead>
           <tr style={{ textAlign: "left", color: "#8A857A", fontSize: 11 }}>
-            <th style={{ padding: "4px", width: "15%" }}>地域名</th>
-            <th style={{ padding: "4px", width: "15%" }}>分類番号</th>
-            <th style={{ padding: "4px", width: "12%" }}>かな</th>
-            <th style={{ padding: "4px", width: "20%" }}>車両番号</th>
-            <th style={{ padding: "4px", width: "20%" }}>車種</th>
-            <th style={{ padding: "4px", width: "18%" }}>状態</th>
+            <th style={{ padding: "4px", width: "12%" }}>地域名</th>
+            <th style={{ padding: "4px", width: "12%" }}>分類番号</th>
+            <th style={{ padding: "4px", width: "10%" }}>かな</th>
+            <th style={{ padding: "4px", width: "16%" }}>車両番号</th>
+            <th style={{ padding: "4px", width: "16%" }}>車種</th>
+            <th style={{ padding: "4px", width: "18%" }}>基本ドライバー</th>
+            <th style={{ padding: "4px", width: "16%" }}>状態</th>
             <th style={{ padding: "4px" }} />
           </tr>
         </thead>
         <tbody>
           {vehicles.map((v) => (
-            <VehicleRow key={v.id} vehicle={v} onSave={onSave} onRequestRemove={onRequestRemove} />
+            <VehicleRow key={v.id} vehicle={v} drivers={drivers} onSave={onSave} onRequestRemove={onRequestRemove} />
           ))}
         </tbody>
       </table>
@@ -1107,7 +1148,7 @@ export default function DispatchApp() {
   const addVehicle = () =>
     setVehicles((prev) => [
       ...prev,
-      { id: uid("v"), area: "", classNum: "", kana: "", num: "", type: "", status: "available" },
+      { id: uid("v"), area: "", classNum: "", kana: "", num: "", type: "", status: "available", defaultDriverId: null },
     ]);
 
   const saveVehicle = (id, draft, changes) => {
@@ -1294,8 +1335,8 @@ export default function DispatchApp() {
       )}
 
       {tab === "vehicles" && (
-        <div style={{ background: "#FFFFFF", border: "1px solid #D8D3C7", borderRadius: 8, padding: 16, maxWidth: 800 }}>
-          <VehicleMaster vehicles={vehicles} onAdd={addVehicle} onSave={saveVehicle} onRequestRemove={requestRemoveVehicle} />
+        <div style={{ background: "#FFFFFF", border: "1px solid #D8D3C7", borderRadius: 8, padding: 16, maxWidth: 960 }}>
+          <VehicleMaster vehicles={vehicles} drivers={drivers} onAdd={addVehicle} onSave={saveVehicle} onRequestRemove={requestRemoveVehicle} />
         </div>
       )}
 
