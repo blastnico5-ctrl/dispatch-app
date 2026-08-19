@@ -1250,7 +1250,8 @@ export default function DispatchApp() {
       style={{
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic', sans-serif",
         background: "#F5F3EE",
-        minHeight: "100%",
+        minHeight: "100vh",
+        minWidth: "fit-content",
         width: "100%",
         padding: 20,
         boxSizing: "border-box",
