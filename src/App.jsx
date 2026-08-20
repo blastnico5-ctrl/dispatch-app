@@ -838,7 +838,7 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
   );
 }
 
-// 週間集計ページコンポーネント（行：日付、列：車両番号）
+// 週間配車表（行：日付 / 列：車両番号）
 function WeeklyBoard({ currentDate, vehicles, drivers, onSelectDate }) {
   const weekDates = useMemo(() => getWeekDates(currentDate), [currentDate]);
   const [weekJobs, setWeekJobs] = useState([]);
@@ -854,10 +854,7 @@ function WeeklyBoard({ currentDate, vehicles, drivers, onSelectDate }) {
     fetchWeekData();
   }, [weekDates]);
 
-  // 週間サマリー集計
-  const totalWeeklyJobs = weekJobs.length;
-  const totalWeeklyAssignments = weekAssignments.length;
-
+  // 表示対象の車両一覧（削除済みだが過去に割り当てがある車両も含む）
   const displayVehicles = useMemo(() => {
     const list = [...vehicles];
     weekAssignments.forEach((a) => {
@@ -878,27 +875,30 @@ function WeeklyBoard({ currentDate, vehicles, drivers, onSelectDate }) {
       {/* 週間サマリー情報 */}
       <div style={{ display: "flex", gap: 20, marginBottom: 16, background: "#FBF9F4", padding: 12, borderRadius: 6, border: "1px solid #ECE8DC" }}>
         <div>
-          <span style={{ fontSize: 12, color: "#8A857A" }}>週間対象期間：</span>
+          <span style={{ fontSize: 12, color: "#8A857A" }}>対象期間：</span>
           <span style={{ fontSize: 13, fontWeight: 700 }}>{weekDates[0]} 〜 {weekDates[6]}</span>
         </div>
         <div>
           <span style={{ fontSize: 12, color: "#8A857A" }}>週間案件数：</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#E8871E" }}>{totalWeeklyJobs} 件</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#E8871E" }}>{weekJobs.length} 件</span>
         </div>
         <div>
-          <span style={{ fontSize: 12, color: "#8A857A" }}>週間運行数（配車数）：</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#1A2332" }}>{totalWeeklyAssignments} 件</span>
+          <span style={{ fontSize: 12, color: "#8A857A" }}>週間運行数：</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#1A2332" }}>{weekAssignments.length} 件</span>
         </div>
       </div>
 
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
           <thead>
+            {/* 【列（横軸）】＝ 車両番号 */}
             <tr style={{ background: "#F5F3EE", borderBottom: "2px solid #D8D3C7" }}>
-              <th style={{ padding: "10px 12px", width: 140, textAlign: "left", fontSize: 12, color: "#8A857A" }}>日付</th>
+              <th style={{ padding: "10px 12px", width: 140, textAlign: "left", fontSize: 12, color: "#8A857A", borderRight: "1px solid #D8D3C7" }}>
+                日付 ＼ 車両
+              </th>
               {displayVehicles.map((v) => (
-                <th key={v.id} style={{ padding: "8px 6px", textAlign: "center", minWidth: 150 }}>
-                  <div style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: "#1A2332" }}>
+                <th key={v.id} style={{ padding: "8px 10px", textAlign: "center", minWidth: 160, borderRight: "1px solid #D8D3C7" }}>
+                  <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 700, color: "#1A2332" }}>
                     {formatBoardPlate(v)}
                   </div>
                   <div style={{ fontSize: 10, color: "#8A857A", fontWeight: "normal" }}>
@@ -909,6 +909,7 @@ function WeeklyBoard({ currentDate, vehicles, drivers, onSelectDate }) {
             </tr>
           </thead>
           <tbody>
+            {/* 【行（縦軸）】＝ 日付（7日分） */}
             {weekDates.map((dateStr) => {
               const [y, m, d] = dateStr.split("-").map(Number);
               const dayOfWeek = new Date(y, m - 1, d).getDay();
@@ -916,33 +917,34 @@ function WeeklyBoard({ currentDate, vehicles, drivers, onSelectDate }) {
               const isSunday = dayOfWeek === 0;
               const isSaturday = dayOfWeek === 6;
 
-              let color = "#1A2332";
-              if (isSunday) color = "#C53030";
-              if (isSaturday) color = "#1A73E8";
+              let dateColor = "#1A2332";
+              if (isSunday) dateColor = "#C53030";
+              if (isSaturday) dateColor = "#1A73E8";
 
               return (
                 <tr key={dateStr} style={{ borderBottom: "1px solid #ECE8DC" }}>
-                  {/* 日付（行ヘッダー） */}
+                  {/* 行ヘッダー：日付 */}
                   <td
                     onClick={() => onSelectDate(dateStr)}
                     style={{
-                      padding: "10px 12px",
+                      padding: "12px",
                       background: isToday ? "#FFEAD2" : "#FBF9F4",
                       borderRight: "1px solid #ECE8DC",
                       cursor: "pointer",
+                      verticalAlign: "middle",
                     }}
                     title="クリックしてこの日の日次配車表へ移動"
                   >
-                    <div style={{ fontSize: 13, color, fontWeight: 700 }}>
+                    <div style={{ fontSize: 13, color: dateColor, fontWeight: 700 }}>
                       {m}/{d} ({WEEKDAY_NAMES[dayOfWeek]})
                     </div>
                   </td>
 
-                  {/* 車両ごとのセル */}
+                  {/* 各車両のセル（各日付ごとの配車結果を表示） */}
                   {displayVehicles.map((v) => {
-                    const cellAssigns = weekAssignments.filter(
-                      (a) => a.date === dateStr && a.vehicleId === v.id
-                    );
+                    const cellAssigns = weekAssignments
+                      .filter((a) => a.date === dateStr && a.vehicleId === v.id)
+                      .sort((a, b) => (a.sequence || 1) - (b.sequence || 1));
 
                     return (
                       <td
@@ -951,13 +953,14 @@ function WeeklyBoard({ currentDate, vehicles, drivers, onSelectDate }) {
                         style={{
                           padding: 6,
                           verticalAlign: "top",
-                          borderRight: "1px solid #F0EEE4",
+                          borderRight: "1px solid #ECE8DC",
                           cursor: "pointer",
                           background: cellAssigns.length > 0 ? "#FFFCF8" : "transparent",
+                          height: 60,
                         }}
                       >
                         {cellAssigns.length === 0 ? (
-                          <div style={{ fontSize: 11, color: "#D8D3C7", textAlign: "center", paddingTop: 4 }}>-</div>
+                          <div style={{ fontSize: 11, color: "#E0DDD5", textAlign: "center", paddingTop: 12 }}>-</div>
                         ) : (
                           cellAssigns.map((a) => {
                             const job = weekJobs.find((j) => j.id === a.jobId);
@@ -972,17 +975,22 @@ function WeeklyBoard({ currentDate, vehicles, drivers, onSelectDate }) {
                                   background: "#F6B15A",
                                   border: "1px solid #E8871E",
                                   borderRadius: 4,
-                                  padding: "3px 5px",
+                                  padding: "4px 6px",
                                   marginBottom: 4,
-                                  fontSize: 10,
+                                  fontSize: 11,
                                 }}
                               >
-                                <div style={{ fontWeight: 700, color: "#3D2400", display: "flex", justifyContent: "space-between" }}>
+                                <div style={{ fontWeight: 700, color: "#3D2400", display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
                                   <span>{driverName}</span>
-                                  <span>{a.sequence}回目</span>
+                                  <span style={{ fontSize: 10, background: "#E8871E", color: "#FFF", borderRadius: 3, padding: "0 4px" }}>
+                                    {a.sequence || 1}回目
+                                  </span>
                                 </div>
                                 {locationText && (
-                                  <div style={{ color: "#5A3A00", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                  <div
+                                    style={{ color: "#5A3A00", fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+                                    title={locationText}
+                                  >
                                     {locationText}
                                   </div>
                                 )}
