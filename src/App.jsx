@@ -979,18 +979,45 @@ export default function DispatchApp() {
   const [tab, setTab] = useState("board");
   const [dialog, setDialog] = useState(null);
 
-  // 初期化＆Supabaseからの全データ取得・リアルタイム同期
+  // 初期データの読み込みと日付変更時のデータ取得
   useEffect(() => {
     fetchMasterData();
     fetchDailyData(selectedDate);
+  }, [selectedDate]);
 
-    // Supabase Realtime サブスクリプションの設定
+  // Supabase Realtime サブスクリプションの設定
+  useEffect(() => {
     const channel = supabase
-      .channel("schema-db-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "vehicles" }, () => fetchMasterData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "drivers" }, () => fetchMasterData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, () => fetchDailyData(selectedDate))
-      .on("postgres_changes", { event: "*", schema: "public", table: "assignments" }, () => fetchDailyData(selectedDate))
+      .channel("realtime-updates")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "vehicles" },
+        () => fetchMasterData()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "drivers" },
+        () => fetchMasterData()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "jobs" },
+        (payload) => {
+          // 変更されたデータの日付、または削除時は現在の選択日付と一致する場合に再取得
+          if (payload.new?.date === selectedDate || payload.old?.date === selectedDate || !payload.new) {
+            fetchDailyData(selectedDate);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "assignments" },
+        (payload) => {
+          if (payload.new?.date === selectedDate || payload.old?.date === selectedDate || !payload.new) {
+            fetchDailyData(selectedDate);
+          }
+        }
+      )
       .subscribe();
 
     return () => {

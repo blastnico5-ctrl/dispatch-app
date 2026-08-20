@@ -8,3 +8,11 @@ https://haisyakanri-app.vercel.app/
 git add .
 git commit -m "update"
 git push origin main
+
+
+
+sb_publishable_fegZpNrwkDYf9-uBGEcSsw_X8s-CksX
+
+https://gerofnrukjsmgnntkmfc.supabase.co/rest/v1/
+
+VITE_SUPABASE_URL
