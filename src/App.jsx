@@ -1,5 +1,13 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { supabase } from "./supabaseClient";
+import { createClient } from "@supabase/supabase-js";
+
+// ==========================================
+// 【重要】お使いのSupabaseのURLとAnon Keyに書き換えてください
+// ==========================================
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || "https://gerofnrukjsmgnntkmfc.supabase.co";
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || "sb_publishable_fegZpNrwkDYf9-uBGEcSsw_X8s-CksX";
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const uid = (p) => `${p}${Math.random().toString(36).slice(2, 8)}`;
 
@@ -56,7 +64,6 @@ const isEditableDate = (dateStr) => {
 
 const getRawDigits = (numStr) => (numStr ? String(numStr).replace(/\D/g, "") : "");
 
-// 配車ボードにはトラクタの車両番号（数字）を表示
 const formatBoardPlate = (v) => {
   if (!v) return "未定";
   const num = v.tractor?.num || v.tractorNum || v.num;
@@ -833,12 +840,11 @@ function VehicleRow({ vehicle, drivers, onSave, onRequestRemove }) {
   };
 
   const handleSave = () => {
-  onSave(vehicle.id, draft);
+    onSave(vehicle.id, draft);
   };
 
   return (
     <tbody style={{ borderTop: "2px solid #D8D3C7" }}>
-      {/* 1行目: トラクタ (前) */}
       <tr>
         <td
           rowSpan={draft.hasTrailer ? 2 : 1}
@@ -959,7 +965,6 @@ function VehicleRow({ vehicle, drivers, onSave, onRequestRemove }) {
         </td>
       </tr>
 
-      {/* 2行目: トレーラー (後) ※有無フラグで表示切替 */}
       {draft.hasTrailer && (
         <tr style={{ background: "#FAFAFA" }}>
           <td style={{ padding: "4px" }}>
@@ -1088,7 +1093,7 @@ const TABS = [
   { key: "drivers", label: "ドライバーマスター" },
 ];
 
-export default function DispatchApp() {
+export default function App() {
   const [selectedDate, setSelectedDate] = useState(getTodayString);
   const isEditable = useMemo(() => isEditableDate(selectedDate), [selectedDate]);
 
