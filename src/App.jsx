@@ -853,17 +853,17 @@ function VehicleRow({ vehicle, drivers, onSave, onRequestRemove }) {
             borderRight: "1px solid #ECE8DC",
           }}
         >
-          <div style={{ marginBottom: 4 }}>
+          <div style={{ marginBottom: 4 }}>トラクタ (前)</div>
+          <div>
             <label style={{ cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 2 }}>
               <input
                 type="checkbox"
                 checked={!!draft.hasTrailer}
                 onChange={(e) => setDraft({ ...draft, hasTrailer: e.target.checked })}
               />
-              トレーラー付
+              トレーラー
             </label>
           </div>
-          <div>トラクタ (前)</div>
         </td>
         <td style={{ padding: "4px" }}>
           <input
