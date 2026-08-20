@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // ==========================================
-// 【重要】お使いのSupabaseのURLとAnon Keyに書き換えてください
+// Supabase接続情報（環境変数または直接入力）
 // ==========================================
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || "https://gerofnrukjsmgnntkmfc.supabase.co";
 const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || "sb_publishable_fegZpNrwkDYf9-uBGEcSsw_X8s-CksX";
@@ -66,8 +66,10 @@ const getRawDigits = (numStr) => (numStr ? String(numStr).replace(/\D/g, "") : "
 
 const formatBoardPlate = (v) => {
   if (!v) return "未定";
-  const num = v.tractor?.num || v.tractorNum || v.num;
-  return getRawDigits(num) || "未設定";
+  const num = v.tractor?.num || v.tractorNum || v.num || v.tractor_num;
+  const rawDigits = getRawDigits(num);
+  if (rawDigits) return rawDigits;
+  return v.type ? `${v.type} (未登録)` : "未設定";
 };
 
 const formatDate = (dateObj) => {
@@ -1173,41 +1175,63 @@ export default function App() {
     }
   };
 
+  // 宵積み（isOvernight）チェック時に指定日の「案件」と「配車枠」を自動作成
   const syncOvernightDrop = async (parentJob, assignment) => {
     if (!assignment.isOvernight || !assignment.dropDate) return;
 
     const targetDate = assignment.dropDate;
-    const { data: targetJobs } = await supabase.from("jobs").select("*").eq("date", targetDate);
 
-    const existingJob = (targetJobs || []).find((j) => j.fromOvernightId === assignment.id);
+    const { data: targetJobs } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("date", targetDate);
+
+    const existingJob = (targetJobs || []).find(
+      (j) => j.fromOvernightId === assignment.id
+    );
     const dropJobId = existingJob ? existingJob.id : uid("j");
 
     const newDropJob = {
       id: dropJobId,
       date: targetDate,
       pickup: `【宵下ろし】${parentJob.pickup || ""}`,
-      dropoff: parentJob.dropoff,
-      item: parentJob.item,
+      dropoff: parentJob.dropoff || "",
+      item: parentJob.item || "",
       isOvernightDrop: true,
       fromOvernightId: assignment.id,
     };
 
+    const { data: targetAssigns } = await supabase
+      .from("assignments")
+      .select("*")
+      .eq("date", targetDate);
+
+    const existingAssign = (targetAssigns || []).find(
+      (a) => a.fromOvernightId === assignment.id
+    );
+    const dropAssignId = existingAssign ? existingAssign.id : uid("a");
+
     const newDropAssignment = {
-      id: uid("a"),
+      id: dropAssignId,
       date: targetDate,
       jobId: dropJobId,
-      vehicleId: assignment.vehicleId,
-      vehiclePlate: assignment.vehiclePlate,
-      driverId: assignment.driverId,
-      driverName: assignment.driverName,
+      vehicleId: assignment.vehicleId || null,
+      vehiclePlate: assignment.vehiclePlate || "未定",
+      driverId: assignment.driverId || null,
+      driverName: assignment.driverName || "担当未定",
       sequence: 1,
-      qty: assignment.qty,
+      qty: assignment.qty || "",
       isOvernight: false,
       dropDate: "",
+      fromOvernightId: assignment.id,
     };
 
     await supabase.from("jobs").upsert([newDropJob]);
     await supabase.from("assignments").upsert([newDropAssignment]);
+
+    if (selectedDate === targetDate) {
+      await fetchDailyData(targetDate);
+    }
   };
 
   const closeDialog = () => setDialog(null);
@@ -1273,11 +1297,11 @@ export default function App() {
         ];
         await saveDailyData(jobs, nextAssignments);
 
-        draftList.forEach((a) => {
+        for (const a of draftList) {
           if (a.isOvernight) {
-            syncOvernightDrop(parentJob, a);
+            await syncOvernightDrop(parentJob, a);
           }
-        });
+        }
       },
     });
   };
@@ -1304,7 +1328,7 @@ export default function App() {
       hasTrailer: true,
       tractor: { maker: "", place: "", code: "", kana: "", num: "" },
       trailer: { maker: "", place: "", code: "", kana: "", num: "" },
-      type: "",
+      type: "標準",
       status: "available",
       defaultDriverId: null,
     };
