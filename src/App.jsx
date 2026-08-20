@@ -88,6 +88,33 @@ const shiftDate = (currentDateStr, days) => {
   return formatDate(d);
 };
 
+// 選択された日付から「日曜日〜土曜日」の1週間分の日付文字列リストを取得するヘルパー関数
+const getWeekDays = (dateStr) => {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const targetDate = new Date(year, month - 1, day);
+  const dayOfWeek = targetDate.getDay(); // 0: 日曜日, 6: 土曜日
+  
+  // 日曜日を取得
+  const sunday = new Date(targetDate);
+  sunday.setDate(targetDate.getDate() - dayOfWeek);
+
+  const days = [];
+  const dayNames = ["日", "月", "火", "水", "木", "金", "土"];
+  
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(sunday);
+    d.setDate(sunday.getDate() + i);
+    days.push({
+      dateStr: formatDate(d),
+      dayName: dayNames[i],
+      monthDay: `${d.getMonth() + 1}/${d.getDate()}`,
+      isSunday: i === 0,
+      isSaturday: i === 6,
+    });
+  }
+  return days;
+};
+
 const inputStyle = {
   width: "100%",
   boxSizing: "border-box",
@@ -658,51 +685,85 @@ function JobPanel({
   );
 }
 
-function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
+function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq, weekDays, selectedDate }) {
   const cols = Array.from({ length: maxSeq }, (_, i) => i + 1);
 
   const displayVehicles = useMemo(() => {
-  const list = [...vehicles];
-  assignments.forEach((a) => {
-    if (a.vehicleId && !list.some((v) => v.id === a.vehicleId)) {
-      list.push({
-        id: a.vehicleId,
-        tractor: { num: a.vehiclePlate || "旧車両" },
-        type: "削除済車両",
-        status: "available",
-        defaultDriverId: null,
-      });
-    }
-  });
-  return list;
-}, [vehicles, assignments]);
+    const list = [...vehicles];
+    assignments.forEach((a) => {
+      if (a.vehicleId && !list.some((v) => v.id === a.vehicleId)) {
+        list.push({
+          id: a.vehicleId,
+          tractor: { num: a.vehiclePlate || "旧車両" },
+          type: "削除済車両",
+          status: "available",
+          defaultDriverId: null,
+        });
+      }
+    });
+    return list;
+  }, [vehicles, assignments]);
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <div style={{ minWidth: 160 + cols.length * 200 }}>
+      <div style={{ minWidth: 160 + weekDays.length * cols.length * 180 }}>
+        {/* 日付ヘッダー（日〜土） */}
         <div style={{ display: "flex", marginLeft: 160 }}>
-          {cols.map((c) => (
-            <div
-              key={c}
-              style={{
-                width: 200,
-                flexShrink: 0,
-                fontSize: 12,
-                fontWeight: 700,
-                color: "#4A5568",
-                padding: "0 6px 6px",
-              }}
-            >
-              {c}回目
-            </div>
-          ))}
+          {weekDays.map((day) => {
+            const isSelected = day.dateStr === selectedDate;
+            let bgColor = "#ECE8DC";
+            let color = "#1A2332";
+            if (day.isSunday) color = "#C53030";
+            if (day.isSaturday) color = "#1A73E8";
+
+            return (
+              <div
+                key={day.dateStr}
+                style={{
+                  width: cols.length * 180,
+                  flexShrink: 0,
+                  textAlign: "center",
+                  background: isSelected ? "#E8871E" : bgColor,
+                  color: isSelected ? "#FFFFFF" : color,
+                  fontWeight: 700,
+                  fontSize: 12,
+                  padding: "4px 0",
+                  borderRight: "1px solid #D8D3C7",
+                }}
+              >
+                {day.monthDay} ({day.dayName})
+              </div>
+            );
+          })}
         </div>
 
-        {displayVehicles.map((v) => {
-          const vAssignments = assignments
-            .filter((a) => a.vehicleId === v.id)
-            .sort((a, b) => a.sequence - b.sequence);
+        {/* 回次ヘッダー */}
+        <div style={{ display: "flex", marginLeft: 160 }}>
+          {weekDays.map((day) =>
+            cols.map((c) => (
+              <div
+                key={`${day.dateStr}-${c}`}
+                style={{
+                  width: 180,
+                  flexShrink: 0,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "#4A5568",
+                  padding: "2px 6px",
+                  textAlign: "center",
+                  background: "#FBF9F4",
+                  borderRight: "1px solid #ECE8DC",
+                  borderBottom: "1px solid #D8D3C7",
+                }}
+              >
+                {c}回目
+              </div>
+            ))
+          )}
+        </div>
 
+        {/* 車両ごとの行データ */}
+        {displayVehicles.map((v) => {
           return (
             <div key={v.id} style={{ display: "flex", borderTop: "1px solid #ECE8DC", minHeight: 56 }}>
               <div
@@ -712,6 +773,11 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
                   padding: "8px 8px 8px 12px",
                   display: "flex",
                   alignItems: "center",
+                  background: "#FFFFFF",
+                  position: "sticky",
+                  left: 0,
+                  zIndex: 1,
+                  borderRight: "2px solid #D8D3C7",
                 }}
               >
                 <StatusDot status={v.status} />
@@ -730,85 +796,92 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
                 </div>
               </div>
 
-              {cols.map((c) => {
-                const cellAssignments = vAssignments.filter((a) => a.sequence === c);
-                return (
-                  <div
-                    key={c}
-                    style={{
-                      width: 200,
-                      flexShrink: 0,
-                      borderLeft: "1px solid #F0EEE4",
-                      padding: 6,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 4,
-                    }}
-                  >
-                    {cellAssignments.map((a) => {
-                      const job = jobs.find((j) => j.id === a.jobId);
-                      const driver = drivers.find((d) => d.id === a.driverId);
-                      const driverDisplayName = driver ? driver.name : a.driverName || "担当未定";
-
-                      const locationText = job
-                        ? [job.pickup, job.dropoff].filter(Boolean).join(" → ")
-                        : "";
-
-                      return (
-                        <div
-                          key={a.id}
-                          style={{
-                            background: "#F6B15A",
-                            border: "1px solid #E8871E",
-                            borderRadius: 4,
-                            padding: "4px 6px",
-                          }}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 2 }}>
-                            {a.isOvernight && <Tag tone="green">宵積</Tag>}
-                            {job?.isOvernightDrop && <Tag tone="blue">宵下ろし</Tag>}
-                            <span style={{ fontSize: 11, fontWeight: 700, color: "#3D2400" }}>
-                              {driverDisplayName}
-                            </span>
-                          </div>
-
-                          {locationText && (
-                            <div
-                              style={{
-                                fontSize: 10,
-                                color: "#5A3A00",
-                                fontWeight: 600,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                              title={locationText}
-                            >
-                              {locationText}
-                            </div>
-                          )}
-
-                          {job?.item && (
-                            <div
-                              style={{
-                                fontSize: 10,
-                                color: "#4A2F00",
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                              title={job.item}
-                            >
-                              品目: {job.item}
-                            </div>
-                          )}
-
-                          {a.qty && <div style={{ fontSize: 10, color: "#5A3A00" }}>数量: {a.qty}</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
+              {weekDays.map((day) => {
+                const dayAssignments = assignments.filter(
+                  (a) => a.vehicleId === v.id && a.date === day.dateStr
                 );
+
+                return cols.map((c) => {
+                  const cellAssignments = dayAssignments.filter((a) => a.sequence === c);
+                  return (
+                    <div
+                      key={`${day.dateStr}-${c}`}
+                      style={{
+                        width: 180,
+                        flexShrink: 0,
+                        borderRight: "1px solid #ECE8DC",
+                        padding: 4,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 4,
+                        background: day.dateStr === selectedDate ? "#FFFDF9" : "#FFFFFF",
+                      }}
+                    >
+                      {cellAssignments.map((a) => {
+                        const job = jobs.find((j) => j.id === a.jobId);
+                        const driver = drivers.find((d) => d.id === a.driverId);
+                        const driverDisplayName = driver ? driver.name : a.driverName || "担当未定";
+
+                        const locationText = job
+                          ? [job.pickup, job.dropoff].filter(Boolean).join(" → ")
+                          : "";
+
+                        return (
+                          <div
+                            key={a.id}
+                            style={{
+                              background: "#F6B15A",
+                              border: "1px solid #E8871E",
+                              borderRadius: 4,
+                              padding: "4px 6px",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 2 }}>
+                              {a.isOvernight && <Tag tone="green">宵積</Tag>}
+                              {job?.isOvernightDrop && <Tag tone="blue">宵下ろし</Tag>}
+                              <span style={{ fontSize: 11, fontWeight: 700, color: "#3D2400" }}>
+                                {driverDisplayName}
+                              </span>
+                            </div>
+
+                            {locationText && (
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  color: "#5A3A00",
+                                  fontWeight: 600,
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                                title={locationText}
+                              >
+                                {locationText}
+                              </div>
+                            )}
+
+                            {job?.item && (
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  color: "#4A2F00",
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                                title={job.item}
+                              >
+                                品目: {job.item}
+                              </div>
+                            )}
+
+                            {a.qty && <div style={{ fontSize: 10, color: "#5A3A00" }}>数量: {a.qty}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                });
               })}
             </div>
           );
@@ -1099,6 +1172,9 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(getTodayString);
   const isEditable = useMemo(() => isEditableDate(selectedDate), [selectedDate]);
 
+  // 日曜日〜土曜日の7日間の情報
+  const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
+
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -1109,55 +1185,58 @@ export default function App() {
 
   useEffect(() => {
     fetchMasterData();
-    fetchDailyData(selectedDate);
+    fetchWeeklyData(weekDays);
 
     const channel = supabase
       .channel("schema-db-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "vehicles" }, () => fetchMasterData())
       .on("postgres_changes", { event: "*", schema: "public", table: "drivers" }, () => fetchMasterData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, () => fetchDailyData(selectedDate))
-      .on("postgres_changes", { event: "*", schema: "public", table: "assignments" }, () => fetchDailyData(selectedDate))
+      .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, () => fetchWeeklyData(weekDays))
+      .on("postgres_changes", { event: "*", schema: "public", table: "assignments" }, () => fetchWeeklyData(weekDays))
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedDate]);
+  }, [selectedDate, weekDays]);
 
   const fetchMasterData = async () => {
-  // is_deleted が false または null のデータのみ取得
-  const { data: vData } = await supabase
-    .from("vehicles")
-    .select("*")
-    .or("is_deleted.is.null,is_deleted.eq.false");
+    const { data: vData } = await supabase
+      .from("vehicles")
+      .select("*")
+      .or("is_deleted.is.null,is_deleted.eq.false");
 
-  const { data: dData } = await supabase
-    .from("drivers")
-    .select("*")
-    .or("is_deleted.is.null,is_deleted.eq.false");
+    const { data: dData } = await supabase
+      .from("drivers")
+      .select("*")
+      .or("is_deleted.is.null,is_deleted.eq.false");
 
-  if (vData && vData.length > 0) {
-    setVehicles(vData);
-  } else {
-    await supabase.from("vehicles").upsert(initialVehicles);
-    setVehicles(initialVehicles);
-  }
+    if (vData && vData.length > 0) {
+      setVehicles(vData);
+    } else {
+      await supabase.from("vehicles").upsert(initialVehicles);
+      setVehicles(initialVehicles);
+    }
 
-  if (dData && dData.length > 0) {
-    setDrivers(dData);
-  } else {
-    await supabase.from("drivers").upsert(initialDrivers);
-    setDrivers(initialDrivers);
-  }
-};
+    if (dData && dData.length > 0) {
+      setDrivers(dData);
+    } else {
+      await supabase.from("drivers").upsert(initialDrivers);
+      setDrivers(initialDrivers);
+    }
+  };
 
-  const fetchDailyData = async (dateStr) => {
-    const { data: jData } = await supabase.from("jobs").select("*").eq("date", dateStr);
-    const { data: aData } = await supabase.from("assignments").select("*").eq("date", dateStr);
+  // 1週間分のデータをまとめて取得
+  const fetchWeeklyData = async (days) => {
+    const dates = days.map((d) => d.dateStr);
+    const { data: jData } = await supabase.from("jobs").select("*").in("date", dates);
+    const { data: aData } = await supabase.from("assignments").select("*").in("date", dates);
 
     setJobs(jData || []);
     setAssignments(aData || []);
-    setExpandedJobId(jData?.[0]?.id || null);
+
+    const selectedDayJobs = (jData || []).filter((j) => j.date === selectedDate);
+    setExpandedJobId(selectedDayJobs[0]?.id || null);
   };
 
   const saveDailyData = async (newJobs, newAssignments) => {
@@ -1174,16 +1253,15 @@ export default function App() {
     setAssignments(newAssignments);
 
     if (newJobs.length > 0) {
-      const formattedJobs = newJobs.map((j) => ({ ...j, date: selectedDate }));
+      const formattedJobs = newJobs.map((j) => ({ ...j, date: j.date || selectedDate }));
       await supabase.from("jobs").upsert(formattedJobs);
     }
     if (newAssignments.length > 0) {
-      const formattedAssigns = newAssignments.map((a) => ({ ...a, date: selectedDate }));
+      const formattedAssigns = newAssignments.map((a) => ({ ...a, date: a.date || selectedDate }));
       await supabase.from("assignments").upsert(formattedAssigns);
     }
   };
 
-  // 宵積み（isOvernight）チェック時に指定日の「案件」と「配車枠」を自動作成
   const syncOvernightDrop = async (parentJob, assignment) => {
     if (!assignment.isOvernight || !assignment.dropDate) return;
 
@@ -1237,9 +1315,7 @@ export default function App() {
     await supabase.from("jobs").upsert([newDropJob]);
     await supabase.from("assignments").upsert([newDropAssignment]);
 
-    if (selectedDate === targetDate) {
-      await fetchDailyData(targetDate);
-    }
+    await fetchWeeklyData(weekDays);
   };
 
   const closeDialog = () => setDialog(null);
@@ -1248,8 +1324,8 @@ export default function App() {
     setDialog(null);
   };
 
-  const handlePrevDay = () => setSelectedDate((prev) => shiftDate(prev, -1));
-  const handleNextDay = () => setSelectedDate((prev) => shiftDate(prev, 1));
+  const handlePrevWeek = () => setSelectedDate((prev) => shiftDate(prev, -7));
+  const handleNextWeek = () => setSelectedDate((prev) => shiftDate(prev, 7));
 
   const saveJob = (id, draft, changes) => {
     if (!isEditable) return;
@@ -1267,7 +1343,7 @@ export default function App() {
   const addJob = async () => {
     if (!isEditable) return;
     const id = uid("j");
-    const nextJobs = [...jobs, { id, pickup: "", dropoff: "", item: "" }];
+    const nextJobs = [...jobs, { id, date: selectedDate, pickup: "", dropoff: "", item: "" }];
     await saveDailyData(nextJobs, assignments);
     setExpandedJobId(id);
   };
@@ -1299,13 +1375,14 @@ export default function App() {
       title: "配車内容を保存しますか？",
       changes,
       onConfirm: async () => {
+        const draftListWithDate = draftList.map((a) => ({ ...a, date: selectedDate }));
         const nextAssignments = [
           ...assignments.filter((a) => a.jobId !== parentJob.id),
-          ...draftList,
+          ...draftListWithDate,
         ];
         await saveDailyData(jobs, nextAssignments);
 
-        for (const a of draftList) {
+        for (const a of draftListWithDate) {
           if (a.isOvernight) {
             await syncOvernightDrop(parentJob, a);
           }
@@ -1356,19 +1433,17 @@ export default function App() {
   };
 
   const requestRemoveVehicle = (id) => {
-  setDialog({
-    title: "この車両を削除（非表示）にしますか？",
-    message: "マスター画面からは非表示になりますが、過去の配車記録には影響しません。",
-    danger: true,
-    confirmLabel: "削除する",
-    onConfirm: async () => {
-      // 画面上のステートから除外
-      setVehicles((prev) => prev.filter((v) => v.id !== id));
-      // 物理削除ではなく is_deleted フラグを true に更新
-      await supabase.from("vehicles").update({ is_deleted: true }).eq("id", id);
-    },
-  });
-};
+    setDialog({
+      title: "この車両を削除（非表示）にしますか？",
+      message: "マスター画面からは非表示になりますが、過去の配車記録には影響しません。",
+      danger: true,
+      confirmLabel: "削除する",
+      onConfirm: async () => {
+        setVehicles((prev) => prev.filter((v) => v.id !== id));
+        await supabase.from("vehicles").update({ is_deleted: true }).eq("id", id);
+      },
+    });
+  };
 
   const addDriver = async () => {
     const newD = { id: uid("d"), name: "", phone: "" };
@@ -1388,28 +1463,36 @@ export default function App() {
   };
 
   const requestRemoveDriver = (id) => {
-  setDialog({
-    title: "このドライバーを削除（非表示）にしますか？",
-    message: "マスター画面からは非表示になりますが、過去の配車記録には影響しません。",
-    danger: true,
-    confirmLabel: "削除する",
-    onConfirm: async () => {
-      // 画面上のステートから除外
-      setDrivers((prev) => prev.filter((d) => d.id !== id));
-      // 物理削除ではなく is_deleted フラグを true に更新
-      await supabase.from("drivers").update({ is_deleted: true }).eq("id", id);
-    },
-  });
-};
+    setDialog({
+      title: "このドライバーを削除（非表示）にしますか？",
+      message: "マスター画面からは非表示になりますが、過去の配車記録には影響しません。",
+      danger: true,
+      confirmLabel: "削除する",
+      onConfirm: async () => {
+        setDrivers((prev) => prev.filter((d) => d.id !== id));
+        await supabase.from("drivers").update({ is_deleted: true }).eq("id", id);
+      },
+    });
+  };
 
   const maxSeq = useMemo(
     () => Math.max(1, ...assignments.map((a) => a.sequence || 1)),
     [assignments]
   );
 
+  const selectedDateJobs = useMemo(
+    () => jobs.filter((j) => j.date === selectedDate),
+    [jobs, selectedDate]
+  );
+
+  const selectedDateAssignments = useMemo(
+    () => assignments.filter((a) => a.date === selectedDate),
+    [assignments, selectedDate]
+  );
+
   const unassignedJobCount = useMemo(
-    () => jobs.filter((j) => !assignments.some((a) => a.jobId === j.id)).length,
-    [jobs, assignments]
+    () => selectedDateJobs.filter((j) => !selectedDateAssignments.some((a) => a.jobId === j.id)).length,
+    [selectedDateJobs, selectedDateAssignments]
   );
 
   return (
@@ -1432,8 +1515,8 @@ export default function App() {
           <div style={{ fontSize: 20, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ marginRight: 8 }}>配車管理</span>
 
-            <button onClick={handlePrevDay} style={btnGhost}>
-              ◀ 前日
+            <button onClick={handlePrevWeek} style={btnGhost}>
+              ◀ 前週
             </button>
 
             <input
@@ -1452,8 +1535,8 @@ export default function App() {
               }}
             />
 
-            <button onClick={handleNextDay} style={btnGhost}>
-              翌日 ▶
+            <button onClick={handleNextWeek} style={btnGhost}>
+              翌週 ▶
             </button>
 
             {!isEditable && (
@@ -1464,7 +1547,7 @@ export default function App() {
           </div>
 
           <div style={{ fontSize: 12, color: "#8A857A", marginTop: 4 }}>
-            案件 {jobs.length} 件（うち配車未定 {unassignedJobCount} 件）／ 配車枠 {assignments.length} 件
+            選択日: {selectedDate} | 案件 {selectedDateJobs.length} 件（うち配車未定 {unassignedJobCount} 件）／ 配車枠 {selectedDateAssignments.length} 件
           </div>
         </div>
 
@@ -1503,7 +1586,7 @@ export default function App() {
         <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>
           <div style={{ paddingLeft: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>案件一覧</div>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>案件一覧 ({selectedDate})</div>
               <button
                 onClick={addJob}
                 disabled={!isEditable}
@@ -1517,11 +1600,11 @@ export default function App() {
               </button>
             </div>
             <div style={{ maxHeight: 680, overflowY: "auto", paddingRight: 4 }}>
-              {jobs.map((j) => (
+              {selectedDateJobs.map((j) => (
                 <JobPanel
                   key={j.id}
                   job={j}
-                  assignments={assignments}
+                  assignments={selectedDateAssignments}
                   vehicles={vehicles}
                   drivers={drivers}
                   currentDate={selectedDate}
@@ -1538,8 +1621,16 @@ export default function App() {
           </div>
 
           <div style={{ background: "#FFFFFF", border: "1px solid #D8D3C7", borderRadius: 8, padding: "16px 16px 16px 0" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, paddingLeft: 16 }}>車両別スケジュール（回次順）</div>
-            <DispatchBoard vehicles={vehicles} assignments={assignments} jobs={jobs} drivers={drivers} maxSeq={maxSeq} />
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, paddingLeft: 16 }}>週間スケジュール（日〜土）</div>
+            <DispatchBoard
+              vehicles={vehicles}
+              assignments={assignments}
+              jobs={jobs}
+              drivers={drivers}
+              maxSeq={maxSeq}
+              weekDays={weekDays}
+              selectedDate={selectedDate}
+            />
           </div>
         </div>
       )}
