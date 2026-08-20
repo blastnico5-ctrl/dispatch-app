@@ -838,7 +838,7 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
   );
 }
 
-// 週間集計ページコンポーネント
+// 週間集計ページコンポーネント（行：日付、列：車両番号）
 function WeeklyBoard({ currentDate, vehicles, drivers, onSelectDate }) {
   const weekDates = useMemo(() => getWeekDates(currentDate), [currentDate]);
   const [weekJobs, setWeekJobs] = useState([]);
@@ -854,7 +854,7 @@ function WeeklyBoard({ currentDate, vehicles, drivers, onSelectDate }) {
     fetchWeekData();
   }, [weekDates]);
 
-  // 週間の合計データ集計
+  // 週間サマリー集計
   const totalWeeklyJobs = weekJobs.length;
   const totalWeeklyAssignments = weekAssignments.length;
 
@@ -895,70 +895,71 @@ function WeeklyBoard({ currentDate, vehicles, drivers, onSelectDate }) {
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
           <thead>
             <tr style={{ background: "#F5F3EE", borderBottom: "2px solid #D8D3C7" }}>
-              <th style={{ padding: "8px 10px", width: 140, textAlign: "left", fontSize: 12, color: "#8A857A" }}>車両</th>
-              {weekDates.map((dateStr) => {
-                const [y, m, d] = dateStr.split("-").map(Number);
-                const dayOfWeek = new Date(y, m - 1, d).getDay();
-                const isToday = dateStr === currentDate;
-                const isSunday = dayOfWeek === 0;
-                const isSaturday = dayOfWeek === 6;
-
-                let color = "#1A2332";
-                if (isSunday) color = "#C53030";
-                if (isSaturday) color = "#1A73E8";
-
-                return (
-                  <th
-                    key={dateStr}
-                    onClick={() => onSelectDate(dateStr)}
-                    style={{
-                      padding: "8px 6px",
-                      textAlign: "center",
-                      cursor: "pointer",
-                      background: isToday ? "#FFEAD2" : "transparent",
-                    }}
-                    title="クリックしてこの日の日次配車表へ移動"
-                  >
-                    <div style={{ fontSize: 12, color, fontWeight: 700 }}>
-                      {m}/{d} ({WEEKDAY_NAMES[dayOfWeek]})
-                    </div>
-                  </th>
-                );
-              })}
+              <th style={{ padding: "10px 12px", width: 140, textAlign: "left", fontSize: 12, color: "#8A857A" }}>日付</th>
+              {displayVehicles.map((v) => (
+                <th key={v.id} style={{ padding: "8px 6px", textAlign: "center", minWidth: 150 }}>
+                  <div style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: "#1A2332" }}>
+                    {formatBoardPlate(v)}
+                  </div>
+                  <div style={{ fontSize: 10, color: "#8A857A", fontWeight: "normal" }}>
+                    {v.type || "車種未定"}
+                  </div>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {displayVehicles.map((v) => {
-              const vAssignments = weekAssignments.filter((a) => a.vehicleId === v.id);
+            {weekDates.map((dateStr) => {
+              const [y, m, d] = dateStr.split("-").map(Number);
+              const dayOfWeek = new Date(y, m - 1, d).getDay();
+              const isToday = dateStr === currentDate;
+              const isSunday = dayOfWeek === 0;
+              const isSaturday = dayOfWeek === 6;
+
+              let color = "#1A2332";
+              if (isSunday) color = "#C53030";
+              if (isSaturday) color = "#1A73E8";
 
               return (
-                <tr key={v.id} style={{ borderBottom: "1px solid #ECE8DC" }}>
-                  <td style={{ padding: "8px 10px", background: "#FBF9F4", borderRight: "1px solid #ECE8DC" }}>
-                    <div style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#1A2332" }}>
-                      {formatBoardPlate(v)}
+                <tr key={dateStr} style={{ borderBottom: "1px solid #ECE8DC" }}>
+                  {/* 日付（行ヘッダー） */}
+                  <td
+                    onClick={() => onSelectDate(dateStr)}
+                    style={{
+                      padding: "10px 12px",
+                      background: isToday ? "#FFEAD2" : "#FBF9F4",
+                      borderRight: "1px solid #ECE8DC",
+                      cursor: "pointer",
+                    }}
+                    title="クリックしてこの日の日次配車表へ移動"
+                  >
+                    <div style={{ fontSize: 13, color, fontWeight: 700 }}>
+                      {m}/{d} ({WEEKDAY_NAMES[dayOfWeek]})
                     </div>
-                    <div style={{ fontSize: 10, color: "#8A857A" }}>{v.type || "車種未定"}</div>
                   </td>
 
-                  {weekDates.map((dateStr) => {
-                    const dayAssigns = vAssignments.filter((a) => a.date === dateStr);
+                  {/* 車両ごとのセル */}
+                  {displayVehicles.map((v) => {
+                    const cellAssigns = weekAssignments.filter(
+                      (a) => a.date === dateStr && a.vehicleId === v.id
+                    );
 
                     return (
                       <td
-                        key={dateStr}
+                        key={v.id}
                         onClick={() => onSelectDate(dateStr)}
                         style={{
                           padding: 6,
                           verticalAlign: "top",
                           borderRight: "1px solid #F0EEE4",
                           cursor: "pointer",
-                          background: dayAssigns.length > 0 ? "#FFFCF8" : "transparent",
+                          background: cellAssigns.length > 0 ? "#FFFCF8" : "transparent",
                         }}
                       >
-                        {dayAssigns.length === 0 ? (
-                          <div style={{ fontSize: 11, color: "#D8D3C7", textAlign: "center", paddingTop: 8 }}>-</div>
+                        {cellAssigns.length === 0 ? (
+                          <div style={{ fontSize: 11, color: "#D8D3C7", textAlign: "center", paddingTop: 4 }}>-</div>
                         ) : (
-                          dayAssigns.map((a) => {
+                          cellAssigns.map((a) => {
                             const job = weekJobs.find((j) => j.id === a.jobId);
                             const driver = drivers.find((d) => d.id === a.driverId);
                             const driverName = driver ? driver.name : a.driverName || "担当未定";
