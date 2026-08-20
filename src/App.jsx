@@ -1266,8 +1266,21 @@ export default function DispatchApp() {
           ...assignments.filter((a) => a.jobId !== parentJob.id),
           ...draftList,
         ];
-        await saveDailyData(jobs, nextAssignments);
 
+        // 画面の表示を先行更新
+        setAssignments(nextAssignments);
+
+        // Supabaseへ保存を実行
+        const formattedAssigns = nextAssignments.map((a) => ({ ...a, date: selectedDate }));
+        const { error } = await supabase.from("assignments").upsert(formattedAssigns);
+
+        if (error) {
+          console.error("配車保存エラー:", error);
+          alert("配車の保存に失敗しました: " + error.message);
+          return;
+        }
+
+        // 宵積み同期処理
         draftList.forEach((a) => {
           if (a.isOvernight) {
             syncOvernightDrop(parentJob, a);
