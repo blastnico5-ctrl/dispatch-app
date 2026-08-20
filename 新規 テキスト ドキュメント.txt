@@ -11,8 +11,18 @@ git push origin main
 
 
 
-sb_publishable_fegZpNrwkDYf9-uBGEcSsw_X8s-CksX
+26　君島
+48　渡部
+122　小田口
+729　中島
+898　手塚
+2151　佐々木
+2203　原
+2228　森
+2239　外園
+2410　角谷
+5680　堀口
+3214　三村
+3296　落合
+3015　佐野
 
-https://gerofnrukjsmgnntkmfc.supabase.co/rest/v1/
-
-VITE_SUPABASE_URL

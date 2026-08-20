@@ -833,7 +833,7 @@ function VehicleRow({ vehicle, drivers, onSave, onRequestRemove }) {
   };
 
   const handleSave = () => {
-    onSave(vehicle.id, draft);
+  onSave(vehicle.id, draft);
   };
 
   return (
