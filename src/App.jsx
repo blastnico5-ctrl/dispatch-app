@@ -1194,7 +1194,7 @@ export default function App() {
     const newDropJob = {
       id: dropJobId,
       date: targetDate,
-      pickup: `【宵下ろし】${parentJob.pickup || ""}`,
+      pickup: parentJob.pickup || "",
       dropoff: parentJob.dropoff || "",
       item: parentJob.item || "",
       isOvernightDrop: true,
