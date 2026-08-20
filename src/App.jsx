@@ -662,20 +662,20 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
   const cols = Array.from({ length: maxSeq }, (_, i) => i + 1);
 
   const displayVehicles = useMemo(() => {
-    const list = [...vehicles];
-    assignments.forEach((a) => {
-      if (a.vehicleId && !list.some((v) => v.id === a.vehicleId)) {
-        list.push({
-          id: a.vehicleId,
-          tractor: { num: a.vehiclePlate || "旧車両" },
-          type: "削除済車両",
-          status: "available",
-          defaultDriverId: null,
-        });
-      }
-    });
-    return list;
-  }, [vehicles, assignments]);
+  const list = [...vehicles];
+  assignments.forEach((a) => {
+    if (a.vehicleId && !list.some((v) => v.id === a.vehicleId)) {
+      list.push({
+        id: a.vehicleId,
+        tractor: { num: a.vehiclePlate || "旧車両" },
+        type: "削除済車両",
+        status: "available",
+        defaultDriverId: null,
+      });
+    }
+  });
+  return list;
+}, [vehicles, assignments]);
 
   return (
     <div style={{ overflowX: "auto" }}>
@@ -1125,23 +1125,31 @@ export default function App() {
   }, [selectedDate]);
 
   const fetchMasterData = async () => {
-    const { data: vData } = await supabase.from("vehicles").select("*");
-    const { data: dData } = await supabase.from("drivers").select("*");
+  // is_deleted が false または null のデータのみ取得
+  const { data: vData } = await supabase
+    .from("vehicles")
+    .select("*")
+    .or("is_deleted.is.null,is_deleted.eq.false");
 
-    if (vData && vData.length > 0) {
-      setVehicles(vData);
-    } else {
-      await supabase.from("vehicles").upsert(initialVehicles);
-      setVehicles(initialVehicles);
-    }
+  const { data: dData } = await supabase
+    .from("drivers")
+    .select("*")
+    .or("is_deleted.is.null,is_deleted.eq.false");
 
-    if (dData && dData.length > 0) {
-      setDrivers(dData);
-    } else {
-      await supabase.from("drivers").upsert(initialDrivers);
-      setDrivers(initialDrivers);
-    }
-  };
+  if (vData && vData.length > 0) {
+    setVehicles(vData);
+  } else {
+    await supabase.from("vehicles").upsert(initialVehicles);
+    setVehicles(initialVehicles);
+  }
+
+  if (dData && dData.length > 0) {
+    setDrivers(dData);
+  } else {
+    await supabase.from("drivers").upsert(initialDrivers);
+    setDrivers(initialDrivers);
+  }
+};
 
   const fetchDailyData = async (dateStr) => {
     const { data: jData } = await supabase.from("jobs").select("*").eq("date", dateStr);
@@ -1348,17 +1356,19 @@ export default function App() {
   };
 
   const requestRemoveVehicle = (id) => {
-    setDialog({
-      title: "この車両を削除しますか？",
-      message: "マスターから削除されても、過去の配車記録には名前がそのまま残ります。",
-      danger: true,
-      confirmLabel: "削除する",
-      onConfirm: async () => {
-        setVehicles((prev) => prev.filter((v) => v.id !== id));
-        await supabase.from("vehicles").delete().eq("id", id);
-      },
-    });
-  };
+  setDialog({
+    title: "この車両を削除（非表示）にしますか？",
+    message: "マスター画面からは非表示になりますが、過去の配車記録には影響しません。",
+    danger: true,
+    confirmLabel: "削除する",
+    onConfirm: async () => {
+      // 画面上のステートから除外
+      setVehicles((prev) => prev.filter((v) => v.id !== id));
+      // 物理削除ではなく is_deleted フラグを true に更新
+      await supabase.from("vehicles").update({ is_deleted: true }).eq("id", id);
+    },
+  });
+};
 
   const addDriver = async () => {
     const newD = { id: uid("d"), name: "", phone: "" };
@@ -1378,17 +1388,19 @@ export default function App() {
   };
 
   const requestRemoveDriver = (id) => {
-    setDialog({
-      title: "このドライバーを削除しますか？",
-      message: "マスターから削除されても、過去の配車記録には名前がそのまま残ります。",
-      danger: true,
-      confirmLabel: "削除する",
-      onConfirm: async () => {
-        setDrivers((prev) => prev.filter((d) => d.id !== id));
-        await supabase.from("drivers").delete().eq("id", id);
-      },
-    });
-  };
+  setDialog({
+    title: "このドライバーを削除（非表示）にしますか？",
+    message: "マスター画面からは非表示になりますが、過去の配車記録には影響しません。",
+    danger: true,
+    confirmLabel: "削除する",
+    onConfirm: async () => {
+      // 画面上のステートから除外
+      setDrivers((prev) => prev.filter((d) => d.id !== id));
+      // 物理削除ではなく is_deleted フラグを true に更新
+      await supabase.from("drivers").update({ is_deleted: true }).eq("id", id);
+    },
+  });
+};
 
   const maxSeq = useMemo(
     () => Math.max(1, ...assignments.map((a) => a.sequence || 1)),
