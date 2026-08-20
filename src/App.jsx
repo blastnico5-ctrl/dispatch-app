@@ -4,11 +4,33 @@ import { supabase } from "./supabaseClient";
 const uid = (p) => `${p}${Math.random().toString(36).slice(2, 8)}`;
 
 const initialVehicles = [
-  { id: "v1", tractorNum: "26", trailerNum: "101", type: "3軸トレーラ", status: "available", defaultDriverId: "d1" },
-  { id: "v2", tractorNum: "48", trailerNum: "102", type: "3軸トレーラ", status: "available", defaultDriverId: "d2" },
-  { id: "v3", tractorNum: "122", trailerNum: "103", type: "3軸トレーラ", status: "available", defaultDriverId: "d3" },
-  { id: "v4", tractorNum: "898", trailerNum: "", type: "3軸トレーラ", status: "available", defaultDriverId: "d4" },
-  { id: "v5", tractorNum: "2151", trailerNum: "", type: "ランゲン", status: "available", defaultDriverId: "d5" },
+  {
+    id: "v1",
+    hasTrailer: true,
+    tractor: { maker: "日野", place: "大宮", code: "300", kana: "あ", num: "26" },
+    trailer: { maker: "日本トレクス", place: "大宮", code: "100", kana: "い", num: "101" },
+    type: "3軸トレーラ",
+    status: "available",
+    defaultDriverId: "d1",
+  },
+  {
+    id: "v2",
+    hasTrailer: true,
+    tractor: { maker: "いすゞ", place: "品川", code: "300", kana: "う", num: "48" },
+    trailer: { maker: "東急車輛", place: "品川", code: "100", kana: "え", num: "102" },
+    type: "3軸トレーラ",
+    status: "available",
+    defaultDriverId: "d2",
+  },
+  {
+    id: "v3",
+    hasTrailer: false,
+    tractor: { maker: "三菱ふそう", place: "横浜", code: "100", kana: "か", num: "2151" },
+    trailer: { maker: "", place: "", code: "", kana: "", num: "" },
+    type: "大型単車",
+    status: "available",
+    defaultDriverId: "d5",
+  },
 ];
 
 const initialDrivers = [
@@ -33,10 +55,11 @@ const isEditableDate = (dateStr) => {
 };
 
 const getRawDigits = (numStr) => (numStr ? String(numStr).replace(/\D/g, "") : "");
-// 配車ボードにはトラクタ番号の数字のみを表示
+
+// 配車ボードにはトラクタの車両番号（数字）を表示
 const formatBoardPlate = (v) => {
   if (!v) return "未定";
-  const num = v.tractorNum || v.num;
+  const num = v.tractor?.num || v.tractorNum || v.num;
   return getRawDigits(num) || "未設定";
 };
 
@@ -59,8 +82,8 @@ const shiftDate = (currentDateStr, days) => {
 const inputStyle = {
   width: "100%",
   boxSizing: "border-box",
-  padding: "6px 8px",
-  fontSize: 13,
+  padding: "5px 6px",
+  fontSize: 12,
   border: "1px solid #D8D3C7",
   borderRadius: 4,
   fontFamily: "inherit",
@@ -635,8 +658,7 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
       if (a.vehicleId && !list.some((v) => v.id === a.vehicleId)) {
         list.push({
           id: a.vehicleId,
-          tractorNum: a.vehiclePlate || "旧車両",
-          trailerNum: "",
+          tractor: { num: a.vehiclePlate || "旧車両" },
           type: "削除済車両",
           status: "available",
           defaultDriverId: null,
@@ -787,153 +809,240 @@ function DispatchBoard({ vehicles, assignments, jobs, drivers, maxSeq }) {
   );
 }
 
-function useDraftRow(row, fields) {
-  const [draft, setDraft] = useState(row);
+function VehicleRow({ vehicle, drivers, onSave, onRequestRemove }) {
+  const [draft, setDraft] = useState(vehicle);
 
   useEffect(() => {
-    setDraft(row);
-  }, [row]);
+    setDraft(vehicle);
+  }, [vehicle]);
 
-  const dirty = fields.some((f) => String(draft[f.key] ?? "") !== String(row[f.key] ?? ""));
-  return { draft, setDraft, dirty };
-}
+  const dirty = JSON.stringify(draft) !== JSON.stringify(vehicle);
 
-const VEHICLE_FIELDS = [
-  { key: "tractorNum", label: "トラクタ番号" },
-  { key: "trailerNum", label: "トレーラー番号" },
-  { key: "type", label: "車種" },
-  { key: "defaultDriverId", label: "基本ドライバー" },
-  { key: "status", label: "状態" },
-];
+  const updateTractor = (key, val) => {
+    setDraft((prev) => ({
+      ...prev,
+      tractor: { ...(prev.tractor || {}), [key]: val },
+    }));
+  };
 
-function VehicleRow({ vehicle, drivers, onSave, onRequestRemove }) {
-  const { draft, setDraft, dirty } = useDraftRow(vehicle, VEHICLE_FIELDS);
+  const updateTrailer = (key, val) => {
+    setDraft((prev) => ({
+      ...prev,
+      trailer: { ...(prev.trailer || {}), [key]: val },
+    }));
+  };
 
   const handleSave = () => {
-    const changes = VEHICLE_FIELDS.filter((f) => draft[f.key] !== vehicle[f.key]).map((f) => {
-      let before = vehicle[f.key];
-      let after = draft[f.key];
-      if (f.key === "status") {
-        before = statusMeta[vehicle[f.key]]?.label;
-        after = statusMeta[draft[f.key]]?.label;
-      } else if (f.key === "defaultDriverId") {
-        before = drivers.find((d) => d.id === vehicle[f.key])?.name || "未設定";
-        after = drivers.find((d) => d.id === draft[f.key])?.name || "未設定";
-      }
-      return { label: f.label, before, after };
-    });
-    onSave(vehicle.id, draft, changes);
+    onSave(vehicle.id, draft);
   };
 
   return (
-    <tr style={{ borderTop: "1px solid #ECE8DC" }}>
-      <td style={{ padding: "4px" }}>
-        <input
-          value={draft.tractorNum ?? draft.num ?? ""}
-          onChange={(e) => setDraft({ ...draft, tractorNum: e.target.value })}
-          placeholder="前"
-          style={{ ...inputStyle, fontFamily: "monospace" }}
-        />
-      </td>
-      <td style={{ padding: "4px" }}>
-        <input
-          value={draft.trailerNum || ""}
-          onChange={(e) => setDraft({ ...draft, trailerNum: e.target.value })}
-          placeholder="後"
-          style={{ ...inputStyle, fontFamily: "monospace" }}
-        />
-      </td>
-      <td style={{ padding: "4px" }}>
-        <input
-          value={draft.type || ""}
-          onChange={(e) => setDraft({ ...draft, type: e.target.value })}
-          placeholder="車種"
-          style={inputStyle}
-        />
-      </td>
-      <td style={{ padding: "4px" }}>
-        <select
-          value={draft.defaultDriverId || ""}
-          onChange={(e) => setDraft({ ...draft, defaultDriverId: e.target.value || null })}
-          style={inputStyle}
+    <tbody style={{ borderTop: "2px solid #D8D3C7" }}>
+      {/* 1行目: トラクタ (前) */}
+      <tr>
+        <td
+          rowSpan={draft.hasTrailer ? 2 : 1}
+          style={{
+            padding: "6px 4px",
+            fontSize: 11,
+            fontWeight: "bold",
+            color: "#4A5568",
+            background: "#FBF9F4",
+            textAlign: "center",
+            verticalAlign: "middle",
+            borderRight: "1px solid #ECE8DC",
+          }}
         >
-          <option value="">未設定</option>
-          {drivers.map((d) => (
-            <option key={d.id} value={d.id}>{d.name}</option>
-          ))}
-        </select>
-      </td>
-      <td style={{ padding: "4px" }}>
-        <select
-          value={draft.status || "available"}
-          onChange={(e) => setDraft({ ...draft, status: e.target.value })}
-          style={inputStyle}
-        >
-          {Object.entries(statusMeta).map(([k, m]) => (
-            <option key={k} value={k}>{m.label}</option>
-          ))}
-        </select>
-      </td>
-      <td style={{ padding: "4px 6px", textAlign: "right" }}>
-        <button
-          onClick={handleSave}
-          disabled={!dirty}
-          style={{ ...btnPrimary, padding: "4px 10px", opacity: dirty ? 1 : 0.4, marginRight: 6 }}
-        >
-          保存
-        </button>
-        <button
-          onClick={() => onRequestRemove(vehicle.id)}
-          style={{ border: "none", background: "none", color: "#C53030", cursor: "pointer" }}
-        >
-          削除
-        </button>
-      </td>
-    </tr>
+          <div style={{ marginBottom: 4 }}>
+            <label style={{ cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 2 }}>
+              <input
+                type="checkbox"
+                checked={!!draft.hasTrailer}
+                onChange={(e) => setDraft({ ...draft, hasTrailer: e.target.checked })}
+              />
+              トレーラー付
+            </label>
+          </div>
+          <div>トラクタ (前)</div>
+        </td>
+        <td style={{ padding: "4px" }}>
+          <input
+            value={draft.tractor?.maker || ""}
+            onChange={(e) => updateTractor("maker", e.target.value)}
+            style={inputStyle}
+            placeholder="メーカー"
+          />
+        </td>
+        <td style={{ padding: "4px" }}>
+          <input
+            value={draft.tractor?.place || ""}
+            onChange={(e) => updateTractor("place", e.target.value)}
+            style={inputStyle}
+            placeholder="地名"
+          />
+        </td>
+        <td style={{ padding: "4px" }}>
+          <input
+            value={draft.tractor?.code || ""}
+            onChange={(e) => updateTractor("code", e.target.value)}
+            style={inputStyle}
+            placeholder="分類番号"
+          />
+        </td>
+        <td style={{ padding: "4px" }}>
+          <input
+            value={draft.tractor?.kana || ""}
+            onChange={(e) => updateTractor("kana", e.target.value)}
+            style={inputStyle}
+            placeholder="かな"
+          />
+        </td>
+        <td style={{ padding: "4px" }}>
+          <input
+            value={draft.tractor?.num || ""}
+            onChange={(e) => updateTractor("num", e.target.value)}
+            style={{ ...inputStyle, fontFamily: "monospace", fontWeight: "bold" }}
+            placeholder="車両番号"
+          />
+        </td>
+        <td rowSpan={draft.hasTrailer ? 2 : 1} style={{ padding: "4px", verticalAlign: "middle" }}>
+          <input
+            value={draft.type || ""}
+            onChange={(e) => setDraft({ ...draft, type: e.target.value })}
+            style={inputStyle}
+            placeholder="車種"
+          />
+        </td>
+        <td rowSpan={draft.hasTrailer ? 2 : 1} style={{ padding: "4px", verticalAlign: "middle" }}>
+          <select
+            value={draft.defaultDriverId || ""}
+            onChange={(e) => setDraft({ ...draft, defaultDriverId: e.target.value || null })}
+            style={inputStyle}
+          >
+            <option value="">未設定</option>
+            {drivers.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </td>
+        <td rowSpan={draft.hasTrailer ? 2 : 1} style={{ padding: "4px", verticalAlign: "middle" }}>
+          <select
+            value={draft.status || "available"}
+            onChange={(e) => setDraft({ ...draft, status: e.target.value })}
+            style={inputStyle}
+          >
+            {Object.entries(statusMeta).map(([k, m]) => (
+              <option key={k} value={k}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </td>
+        <td rowSpan={draft.hasTrailer ? 2 : 1} style={{ padding: "4px 6px", textAlign: "right", verticalAlign: "middle" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+            <button
+              onClick={handleSave}
+              disabled={!dirty}
+              style={{ ...btnPrimary, padding: "4px 10px", opacity: dirty ? 1 : 0.4 }}
+            >
+              保存
+            </button>
+            <button
+              onClick={() => onRequestRemove(vehicle.id)}
+              style={{ border: "none", background: "none", color: "#C53030", cursor: "pointer", fontSize: 11 }}
+            >
+              削除
+            </button>
+          </div>
+        </td>
+      </tr>
+
+      {/* 2行目: トレーラー (後) ※有無フラグで表示切替 */}
+      {draft.hasTrailer && (
+        <tr style={{ background: "#FAFAFA" }}>
+          <td style={{ padding: "4px" }}>
+            <input
+              value={draft.trailer?.maker || ""}
+              onChange={(e) => updateTrailer("maker", e.target.value)}
+              style={inputStyle}
+              placeholder="メーカー"
+            />
+          </td>
+          <td style={{ padding: "4px" }}>
+            <input
+              value={draft.trailer?.place || ""}
+              onChange={(e) => updateTrailer("place", e.target.value)}
+              style={inputStyle}
+              placeholder="地名"
+            />
+          </td>
+          <td style={{ padding: "4px" }}>
+            <input
+              value={draft.trailer?.code || ""}
+              onChange={(e) => updateTrailer("code", e.target.value)}
+              style={inputStyle}
+              placeholder="分類番号"
+            />
+          </td>
+          <td style={{ padding: "4px" }}>
+            <input
+              value={draft.trailer?.kana || ""}
+              onChange={(e) => updateTrailer("kana", e.target.value)}
+              style={inputStyle}
+              placeholder="かな"
+            />
+          </td>
+          <td style={{ padding: "4px" }}>
+            <input
+              value={draft.trailer?.num || ""}
+              onChange={(e) => updateTrailer("num", e.target.value)}
+              style={{ ...inputStyle, fontFamily: "monospace" }}
+              placeholder="車両番号"
+            />
+          </td>
+        </tr>
+      )}
+    </tbody>
   );
 }
 
 function VehicleMaster({ vehicles, drivers, onAdd, onSave, onRequestRemove }) {
   return (
     <div>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
         <thead>
-          <tr style={{ textAlign: "left", color: "#8A857A", fontSize: 11 }}>
-            <th style={{ padding: "4px", width: "20%" }}>トラクタ番号（前）</th>
-            <th style={{ padding: "4px", width: "20%" }}>トレーラー番号（後）</th>
-            <th style={{ padding: "4px", width: "20%" }}>車種</th>
-            <th style={{ padding: "4px", width: "22%" }}>基本ドライバー</th>
-            <th style={{ padding: "4px", width: "18%" }}>状態</th>
-            <th style={{ padding: "4px" }} />
+          <tr style={{ textAlign: "left", color: "#8A857A", fontSize: 11, background: "#F5F3EE" }}>
+            <th style={{ padding: "6px 4px", width: "110px", textAlign: "center" }}>区分</th>
+            <th style={{ padding: "6px 4px", width: "11%" }}>メーカー</th>
+            <th style={{ padding: "6px 4px", width: "10%" }}>地名</th>
+            <th style={{ padding: "6px 4px", width: "10%" }}>分類番号</th>
+            <th style={{ padding: "6px 4px", width: "8%" }}>ひらがな</th>
+            <th style={{ padding: "6px 4px", width: "12%" }}>車両番号</th>
+            <th style={{ padding: "6px 4px", width: "13%" }}>車種</th>
+            <th style={{ padding: "6px 4px", width: "15%" }}>基本ドライバー</th>
+            <th style={{ padding: "6px 4px", width: "11%" }}>状態</th>
+            <th style={{ padding: "6px 4px" }} />
           </tr>
         </thead>
-        <tbody>
-          {vehicles.map((v) => (
-            <VehicleRow key={v.id} vehicle={v} drivers={drivers} onSave={onSave} onRequestRemove={onRequestRemove} />
-          ))}
-        </tbody>
+        {vehicles.map((v) => (
+          <VehicleRow key={v.id} vehicle={v} drivers={drivers} onSave={onSave} onRequestRemove={onRequestRemove} />
+        ))}
       </table>
-      <button onClick={onAdd} style={{ ...btnPrimary, marginTop: 10 }}>＋ 車両を追加</button>
+      <button onClick={onAdd} style={{ ...btnPrimary, marginTop: 12 }}>＋ 車両を追加</button>
     </div>
   );
 }
 
-const DRIVER_FIELDS = [
-  { key: "name", label: "氏名" },
-  { key: "phone", label: "連絡先" },
-];
-
 function DriverRow({ driver, onSave, onRequestRemove }) {
-  const { draft, setDraft, dirty } = useDraftRow(driver, DRIVER_FIELDS);
+  const [draft, setDraft] = useState(driver);
 
-  const handleSave = () => {
-    const changes = DRIVER_FIELDS.filter((f) => draft[f.key] !== driver[f.key]).map((f) => ({
-      label: f.label,
-      before: driver[f.key],
-      after: draft[f.key],
-    }));
-    onSave(driver.id, draft, changes);
-  };
+  useEffect(() => {
+    setDraft(driver);
+  }, [driver]);
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(driver);
 
   return (
     <tr style={{ borderTop: "1px solid #ECE8DC" }}>
@@ -944,7 +1053,7 @@ function DriverRow({ driver, onSave, onRequestRemove }) {
         <input value={draft.phone || ""} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} placeholder="未入力" style={inputStyle} />
       </td>
       <td style={{ padding: "4px 6px", textAlign: "right" }}>
-        <button onClick={handleSave} disabled={!dirty} style={{ ...btnPrimary, padding: "4px 10px", opacity: dirty ? 1 : 0.4, marginRight: 6 }}>保存</button>
+        <button onClick={() => onSave(driver.id, draft)} disabled={!dirty} style={{ ...btnPrimary, padding: "4px 10px", opacity: dirty ? 1 : 0.4, marginRight: 6 }}>保存</button>
         <button onClick={() => onRequestRemove(driver.id)} style={{ border: "none", background: "none", color: "#C53030", cursor: "pointer" }}>削除</button>
       </td>
     </tr>
@@ -1185,16 +1294,22 @@ export default function DispatchApp() {
   };
 
   const addVehicle = async () => {
-    const newV = { id: uid("v"), tractorNum: "", trailerNum: "", type: "", status: "available", defaultDriverId: null };
+    const newV = {
+      id: uid("v"),
+      hasTrailer: true,
+      tractor: { maker: "", place: "", code: "", kana: "", num: "" },
+      trailer: { maker: "", place: "", code: "", kana: "", num: "" },
+      type: "",
+      status: "available",
+      defaultDriverId: null,
+    };
     setVehicles((prev) => [...prev, newV]);
     await supabase.from("vehicles").upsert([newV]);
   };
 
-  const saveVehicle = (id, draft, changes) => {
-    if (changes.length === 0) return;
+  const saveVehicle = (id, draft) => {
     setDialog({
       title: "車両情報を保存しますか？",
-      changes,
       onConfirm: async () => {
         const updated = { ...draft, id };
         setVehicles((prev) => prev.map((v) => (v.id === id ? updated : v)));
@@ -1222,11 +1337,9 @@ export default function DispatchApp() {
     await supabase.from("drivers").upsert([newD]);
   };
 
-  const saveDriver = (id, draft, changes) => {
-    if (changes.length === 0) return;
+  const saveDriver = (id, draft) => {
     setDialog({
       title: "ドライバー情報を保存しますか？",
-      changes,
       onConfirm: async () => {
         const updated = { ...draft, id };
         setDrivers((prev) => prev.map((d) => (d.id === id ? updated : d)));
@@ -1391,7 +1504,7 @@ export default function DispatchApp() {
       )}
 
       {tab === "vehicles" && (
-        <div style={{ background: "#FFFFFF", border: "1px solid #D8D3C7", borderRadius: 8, padding: 16, marginLeft: 16, maxWidth: 960 }}>
+        <div style={{ background: "#FFFFFF", border: "1px solid #D8D3C7", borderRadius: 8, padding: 16, marginLeft: 16, maxWidth: 1080 }}>
           <VehicleMaster vehicles={vehicles} drivers={drivers} onAdd={addVehicle} onSave={saveVehicle} onRequestRemove={requestRemoveVehicle} />
         </div>
       )}
